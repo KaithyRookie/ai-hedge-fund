@@ -9,7 +9,7 @@ class BalanceWorker:
     def __init__(self, db: BalanceDB):
         self.db = db
 
-    def download_balance_from_report(ticker: str) -> Boolean:
+    def download_balance_from_report(self, ticker: str) -> bool:
         try:
             stock_financial_report_sina_df = ak.stock_financial_report_sina(stock=ticker, symbol="资产负债表")
         except Exception as e:
@@ -22,35 +22,36 @@ class BalanceWorker:
             if datetime.strptime(report_period, '%Y%m%d') <= latest_report_date:
                 continue
             logging.info(f"Processing {ticker} balance report {report_period}")
-            data = BalanceSheetData(
-                ticker=ticker,
-                report_period=report_period,
-                current_assets=row['流动资产'],
-                monetary_funds=row['货币资金'],
-                data_source=row['数据源'],
-                is_audited=row['是否审计'],
-                announcement_date=row['公告日期'],
-                currency=row['币种'],
-                report_type=row['类型'],
-                update_date = row['更新日期']
-                )
-            if not pd.isna(data.settlement_reserves):
+            data = BalanceSheetData.model_construct()
+            data.ticker = ticker
+            data.report_date = report_period
+            data.monetary_funds = row['货币资金']
+            data.data_source = row['数据源']
+            data.is_audited = row['是否审计']
+            data.announcement_date = row['公告日期']
+            data.currency = row['币种']
+            data.report_type = row['类型']
+            data.update_date = row['更新日期']
+
+            if not pd.isna(row['流动资产']):
+                data.current_assets = row['流动资产']
+            if not pd.isna(row['结算备付金']):
                 data.settlement_reserves = row['结算备付金']
-            if not pd.isna(data.lending_funds):
+            if not pd.isna(row['拆出资金']):
                 data.lending_funds = row['拆出资金']
-            if not pd.isna(data.trading_financial_assets):
+            if not pd.isna(row['交易性金融资产']):
                 data.trading_financial_assets = row['交易性金融资产']
-            if not pd.isna(data.bought_sellback_financial_assets):
+            if not pd.isna(row['买入返售金融资产']):
                 data.bought_sellback_financial_assets = row['买入返售金融资产']
-            if not pd.isna(data.derivative_financial_assets):
+            if not pd.isna(row['衍生金融资产']):
                 data.derivative_financial_assets = row['衍生金融资产']
-            if not pd.isna(data.notes_accounts_receivable):
+            if not pd.isna(row['应收票据及应收账款']):
                 data.notes_accounts_receivable = row['应收票据及应收账款']
-            if not pd.isna(data.notes_receivable):
+            if not pd.isna(row['应收票据']):
                 data.notes_receivable = row['应收票据']
-            if not pd.isna(data.accounts_receivable):
+            if not pd.isna(row['应收账款']):
                 data.accounts_receivable = row['应收账款']
-            if not pd.isna(data.receivables_financing):
+            if not pd.isna(row['应收款项融资']):
                 data.receivables_financing = row['应收款项融资']
             if not pd.isna(row['预付款项']):
                 data.prepayments = row['预付款项']
@@ -399,3 +400,5 @@ class BalanceWorker:
                 self.db.insert_balance_sheet(data)
             except Exception as e:
                 logging.error(f"Error inserting balance sheet data for {ticker}_{report_period}: {e}")
+                return False
+        return True

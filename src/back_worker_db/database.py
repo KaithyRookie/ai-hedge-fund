@@ -14,7 +14,7 @@ def init_database(host: str, user: str, password: str, database: str):
     cur = conn.cursor()
 
     # 检查并创建数据库
-    cur.execute("SELECT 1 FROM pg_database WHERE datname = 'db_ai_hedge_fund'")
+    cur.execute(f"SELECT 1 FROM pg_database WHERE datname = '{database}'")
     if not cur.fetchone():
         cur.execute(f"CREATE DATABASE {database}")
     
@@ -323,7 +323,7 @@ def init_database(host: str, user: str, password: str, database: str):
     cur.close()
     conn.close()
 
-def get_db_connection(host: str, user: str, password: str, database: str):
+def get_db_connection(host: str, user: str, password: str, database: str) -> psycopg2.extensions.connection: 
     """获取数据库连接"""
     return psycopg2.connect(
         host=host,
