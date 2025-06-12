@@ -553,29 +553,30 @@ class FinancialMetricsWorker:
         ebitda_dict = {}
         stock_profit_sheet_by_report_em_df = ak.stock_profit_sheet_by_report_em(symbol=ticker)
         for index, row in stock_profit_sheet_by_report_em_df.iterrows():
-            data_date = row['报告日']
+            data_date = row['REPORT_DATE']
             # 利息费用
-            interest_expense = row['利息费用']
+            interest_expense = row['FE_INTEREST_EXPENSE']
             # 利润总额
-            profit_total = row['利润总额']
+            profit_total = row['TOTAL_PROFIT']
             ebitda = profit_total + interest_expense
             ebitda_dict[data_date] = ebitda
 
         stock_cash_flow_sheet_by_report_em_df = ak.stock_cash_flow_sheet_by_report_em(symbol=ticker)
         for index, row in stock_cash_flow_sheet_by_report_em_df.iterrows():
-            data_date = row['报告日']
+            data_date = row['REPORT_DATE']
             # 固定资产和投资性房地产折旧
-            depreciation_and_amortization = row['固定资产和投资性房地产折旧']
+            depreciation_and_amortization = row['FA_IR_DEPR']
             # 无形资产摊销
-            amortization = row['无形资产摊销']
+            amortization = row['IA_AMORTIZE']
             # 长期待摊费用摊销
-            long_term_prepaid_expenses = row['长期待摊费用摊销']
+            long_term_prepaid_expenses = row['LPE_AMORTIZE']
 
             # EBITBD
             ebitda = ebitda_dict[data_date]
             ebitda_dict[data_date] = ebitda + depreciation_and_amortization + amortization + long_term_prepaid_expenses
 
         stock_financial_abstract_df = ak.stock_financial_abstract(symbol=ticker)
+        # 行列互换
         for index, row in stock_financial_abstract_df.iterrows():
             data_date = row['报告日']
             # 基本每股收益

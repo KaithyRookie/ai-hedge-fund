@@ -22,6 +22,7 @@ class ProfitWorker:
             return False
         latest_report_date_str = self.profit_db.get_latest_profit_report_date(ticker)
         latest_report_date = datetime.strptime(latest_report_date_str, '%Y%m%d') if latest_report_date_str else datetime(1900, 1, 1)
+        
         for index, row in stock_financial_report_sina_df.iterrows():
             report_date_str = row['报告日']
             report_date = datetime.strptime(report_date_str, '%Y%m%d')
