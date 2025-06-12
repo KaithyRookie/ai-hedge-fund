@@ -6,7 +6,7 @@ from datetime import datetime
 
 class StockValuationWorker:
     def __init__(self, db: StockValuationDB):
-        self.db = stock_valuation_db
+        self.db = db
 
     def download_stock_valuation(self, ticker: str):
         """
@@ -25,7 +25,7 @@ class StockValuationWorker:
                 continue
             data = StockValuationData.model_construct()
             data.ticker = ticker
-            data.data_date = value_date
+            data.data_date = value_date_str
             if not pd.isna(row['当日收盘价']):  
                 data.closing_price = row['当日收盘价']
             if not pd.isna(row['当日涨跌幅']):

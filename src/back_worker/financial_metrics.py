@@ -62,8 +62,6 @@ class FinancialMetricsWorker:
             )
             self.financial_metrics_db.insert_financial_metrics(financial_metrics, ticker)
     
-    def get_stock_hk_financial_metrics(self, ticker: str):
-    
     def get_stock_hk_financial_report(self, ticker: str):
         stock_financial_metric_dict = {}
         financial_report_date_list = []
@@ -576,7 +574,6 @@ class FinancialMetricsWorker:
             ebitda_dict[data_date] = ebitda + depreciation_and_amortization + amortization + long_term_prepaid_expenses
 
         stock_financial_abstract_df = ak.stock_financial_abstract(symbol=ticker)
-        # 行列互换
         for index, row in stock_financial_abstract_df.iterrows():
             data_date = row['报告日']
             # 基本每股收益
