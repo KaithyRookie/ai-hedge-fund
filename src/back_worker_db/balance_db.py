@@ -201,24 +201,26 @@ class BalanceDB:
             """, values)
             self.conn.commit()
 
-    def get_balance_sheet(self, ticker: str, start_date: str,  end_date: str = None) -> list[BalanceSheetData]:
+    def get_balance_sheet(self, ticker: str, start_date: str=None,  end_date: str = None) -> list[BalanceSheetData]:
         """查询资产负债表数据"""
-        with self.conn.cursor(cursor_factory=DictCursor) as cur:
-            if start_date and end_date:
-                cur.execute("""
-                    SELECT id, ticker, report_date, current_assets, monetary_funds, settlement_reserves, lending_funds, trading_financial_assets, bought_sellback_financial_assets, derivative_financial_assets, notes_accounts_receivable, notes_receivable, accounts_receivable, receivables_financing, prepayments, dividends_receivable, interest_receivable, insurance_receivables, reinsurance_receivables, reinsurance_contract_reserves_receivable, export_tax_rebates_receivable, subsidies_receivable, deposits_receivable, internal_receivables, other_receivables, other_receivables_total, inventories, assets_held_for_sale, deferred_expenses, pending_current_asset_gains_losses, non_current_assets_due_within_one_year, other_current_assets, total_current_assets, non_current_assets, loans_and_advances, debt_investments, other_debt_investments, financial_assets_fvoci, financial_assets_amortized_cost, available_for_sale_financial_assets, long_term_equity_investments, investment_properties, long_term_receivables, other_equity_instruments, other_non_current_financial_assets, other_long_term_investments, fixed_assets_original_value, accumulated_depreciation, fixed_assets_net_value, fixed_assets_impairment_provision, construction_in_progress_total, construction_in_progress, construction_materials, fixed_assets_net_amount, fixed_assets_disposal, fixed_assets_and_disposal_total, productive_biological_assets, public_welfare_biological_assets, oil_and_gas_assets, contract_assets, right_of_use_assets, intangible_assets, development_expenditure, goodwill, long_term_prepaid_expenses, equity_split_circulation_rights, deferred_tax_assets, other_non_current_assets, total_non_current_assets, total_assets, current_liabilities, short_term_borrowings, borrowings_from_central_bank, deposits_from_banks_and_other_institutions, borrowings_from_banks, trading_financial_liabilities, derivative_financial_liabilities, notes_accounts_payable, notes_payable, accounts_payable, advance_receipts, contract_liabilities, sold_buyback_financial_assets, commission_and_brokerage_payable, employee_benefits_payable, taxes_payable, interest_payable, dividends_payable, deposits_payable, internal_payables, other_payables, other_payables_total, other_taxes_payable, guarantee_liability_compensation_provision, reinsurance_payables, insurance_contract_reserves, securities_trading_agency_payable, securities_underwriting_agency_payable, international_settlement, domestic_settlement, accrued_expenses, estimated_current_liabilities, short_term_bonds_payable, liabilities_held_for_sale, deferred_income_within_one_year, non_current_liabilities_due_within_one_year, other_current_liabilities, total_current_liabilities, non_current_liabilities, long_term_borrowings, bonds_payable, bonds_payable_preferred_shares, bonds_payable_perpetual_bonds, lease_liabilities, long_term_employee_benefits_payable, long_term_payables, long_term_payables_total, special_payables, estimated_non_current_liabilities, long_term_deferred_income, deferred_tax_liabilities, other_non_current_liabilities, total_non_current_liabilities, total_liabilities, owners_equity, paid_in_capital, other_equity_instruments_equity, preferred_shares_equity, perpetual_bonds_equity, capital_reserve, treasury_stock, other_comprehensive_income, special_reserve, surplus_reserve, general_risk_provision, undetermined_investment_losses, retained_earnings, proposed_cash_dividends, foreign_currency_translation_differences, total_equity_attributable_to_parent, minority_interests, total_owners_equity, total_liabilities_and_owners_equity, data_source, is_audited, announcement_date, currency, report_type, update_date, created_at, update_at, is_deleted
-                    FROM tb_balance_sina
-                    WHERE ticker = %s AND report_date BETWEEN %s AND %s
-                    ORDER BY id DESC
-                """, (ticker, start_date, end_date))
-            else:
-                cur.execute("""
-                    SELECT id, ticker, report_date, current_assets, monetary_funds, settlement_reserves, lending_funds, trading_financial_assets, bought_sellback_financial_assets, derivative_financial_assets, notes_accounts_receivable, notes_receivable, accounts_receivable, receivables_financing, prepayments, dividends_receivable, interest_receivable, insurance_receivables, reinsurance_receivables, reinsurance_contract_reserves_receivable, export_tax_rebates_receivable, subsidies_receivable, deposits_receivable, internal_receivables, other_receivables, other_receivables_total, inventories, assets_held_for_sale, deferred_expenses, pending_current_asset_gains_losses, non_current_assets_due_within_one_year, other_current_assets, total_current_assets, non_current_assets, loans_and_advances, debt_investments, other_debt_investments, financial_assets_fvoci, financial_assets_amortized_cost, available_for_sale_financial_assets, long_term_equity_investments, investment_properties, long_term_receivables, other_equity_instruments, other_non_current_financial_assets, other_long_term_investments, fixed_assets_original_value, accumulated_depreciation, fixed_assets_net_value, fixed_assets_impairment_provision, construction_in_progress_total, construction_in_progress, construction_materials, fixed_assets_net_amount, fixed_assets_disposal, fixed_assets_and_disposal_total, productive_biological_assets, public_welfare_biological_assets, oil_and_gas_assets, contract_assets, right_of_use_assets, intangible_assets, development_expenditure, goodwill, long_term_prepaid_expenses, equity_split_circulation_rights, deferred_tax_assets, other_non_current_assets, total_non_current_assets, total_assets, current_liabilities, short_term_borrowings, borrowings_from_central_bank, deposits_from_banks_and_other_institutions, borrowings_from_banks, trading_financial_liabilities, derivative_financial_liabilities, notes_accounts_payable, notes_payable, accounts_payable, advance_receipts, contract_liabilities, sold_buyback_financial_assets, commission_and_brokerage_payable, employee_benefits_payable, taxes_payable, interest_payable, dividends_payable, deposits_payable, internal_payables, other_payables, other_payables_total, other_taxes_payable, guarantee_liability_compensation_provision, reinsurance_payables, insurance_contract_reserves, securities_trading_agency_payable, securities_underwriting_agency_payable, international_settlement, domestic_settlement, accrued_expenses, estimated_current_liabilities, short_term_bonds_payable, liabilities_held_for_sale, deferred_income_within_one_year, non_current_liabilities_due_within_one_year, other_current_liabilities, total_current_liabilities, non_current_liabilities, long_term_borrowings, bonds_payable, bonds_payable_preferred_shares, bonds_payable_perpetual_bonds, lease_liabilities, long_term_employee_benefits_payable, long_term_payables, long_term_payables_total, special_payables, estimated_non_current_liabilities, long_term_deferred_income, deferred_tax_liabilities, other_non_current_liabilities, total_non_current_liabilities, total_liabilities, owners_equity, paid_in_capital, other_equity_instruments_equity, preferred_shares_equity, perpetual_bonds_equity, capital_reserve, treasury_stock, other_comprehensive_income, special_reserve, surplus_reserve, general_risk_provision, undetermined_investment_losses, retained_earnings, proposed_cash_dividends, foreign_currency_translation_differences, total_equity_attributable_to_parent, minority_interests, total_owners_equity, total_liabilities_and_owners_equity, data_source, is_audited, announcement_date, currency, report_type, update_date, created_at, update_at, is_deleted
-                    FROM tb_balance_sina
-                    WHERE ticker = %s
-                    ORDER BY id DESC
-                """, (ticker,))
+        params = ['ticker = %s']
+        values = [ticker]
+        if start_date is not None:
+            params.append('report_date >= %s')
+            values.append(start_date)
 
+        if end_date is not None:
+            params.append('report_date <= %s')
+            values.append(end_date)
+        params_str = ' AND '.join(params)
+        sql = f"""
+            SELECT *
+            FROM tb_balance_sina
+            WHERE {params_str}
+            ORDER BY report_date DESC
+        """
+        with self.conn.cursor(cursor_factory=DictCursor) as cur:
+            cur.execute(sql, values)
             data_list = []
             for row in cur.fetchall():
                 data = BalanceSheetData()
@@ -230,6 +232,7 @@ class BalanceDB:
                     setattr(data, key, value)
                 data_list.append(data)
             return data_list
+
 
     def delete_balance_sheet(self, ticker: str, start_date: str,  end_date: str = None):
         """删除资产负债表数据"""
@@ -258,4 +261,4 @@ class BalanceDB:
             cur.execute(sql, params)
             self.conn.commit()
 
-   
+

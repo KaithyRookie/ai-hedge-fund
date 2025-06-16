@@ -1,4 +1,4 @@
-CREATE TABLE tb_balance_sina (
+CREATE TABLE IF NOT EXISTS  tb_balance_sina (
     id SERIAL PRIMARY KEY,
     ticker VARCHAR(20), -- '股票代码',
     report_date VARCHAR(20) , -- '报告日',

@@ -53,25 +53,29 @@ class StockValuationDB:
                 return result[0]
             return None
 
-    def query_stock_valuation(self, ticker: str, data_date: str = None):
+    def query_stock_valuation(self, ticker: str, start_date:str=None, end_date: str = None) -> list[StockValuationData]:
         """
         查询股票估值数据
         :param ticker: 股票代码
         :param data_date: 数据日期，可选参数
         :return: 查询结果列表
         """
-        if data_date:
-            sql = "SELECT * FROM tb_stock_valuation WHERE ticker = %s AND data_date = %s"
-            params = (ticker, data_date)
-        else:
-            sql = "SELECT * FROM tb_stock_valuation WHERE ticker = %s"
-            params = (ticker,)
+        params = ['ticker = %s']
+        values = [ticker]
+        if start_date:
+            params.append('data_date >= %s')
+            values.append(start_date)
+        if end_date:
+            params.append('data_date <= %s')
+            values.append(end_date)
+        sql = f"SELECT * FROM tb_stock_valuation WHERE {' AND '.join(params)}"
         
         with self.conn.cursor() as cur:
-            cur.execute(sql, params)
-            result = cur.fetchall()
-            columns = [desc[0] for desc in cur.description]
-            return [dict(zip(columns, row)) for row in result]
+            cur.execute(sql, values)
+            data_list = []
+            for row in cur.fetchall():
+                data_list.append(StockValuationData.model_validate(row))
+            return data_list
 
     def update_stock_valuation(self, ticker: str, data_date: str, update_data: dict):
         """

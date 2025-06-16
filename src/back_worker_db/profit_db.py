@@ -133,24 +133,25 @@ class ProfitDB:
             result = cur.fetchone()
             return result[0] if result else None
 
-    def get_profit(self, ticker: str, start_date: str = None, end_date: str = None) -> list:
+    def get_profit(self, ticker: str, start_date: str = None, end_date: str = None) -> list[ProfitData]:
         """查询利润表数据"""
+        params = ['ticker = %s ']
+        values = [ticker]
+        if start_date:
+            params.append('report_date >= %s')
+            values.append(start_date)
+        if end_date:
+            params.append('report_date <= %s')
+            values.append(end_date)
+        params_str = ' AND '.join(params)
+        sql = f"""
+            SELECT *
+            FROM tb_profit_sina
+            WHERE {params_str}
+            ORDER BY id desc
+        """
         with self.conn.cursor() as cur:
-            if start_date and end_date:
-                cur.execute("""
-                    SELECT *
-                    FROM tb_profit_sina
-                    WHERE ticker = %s AND report_date BETWEEN %s AND %s
-                    ORDER BY id desc
-                """, (ticker, start_date, end_date))
-            else:
-                cur.execute("""
-                    SELECT *
-                    FROM tb_profit_sina
-                    WHERE ticker = %s
-                    ORDER BY id desc
-                """, (ticker,))
-            
+            cur.execute(sql, values)
             data_list = []
             for row in cur.fetchall():
                 data = ProfitData()

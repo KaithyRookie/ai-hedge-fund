@@ -16,6 +16,7 @@ class PriceResponse(BaseModel):
 
 
 class FinancialMetrics(BaseModel):
+    id: int = None
     ticker: str
     report_period: str
     period: str
@@ -61,6 +62,9 @@ class FinancialMetrics(BaseModel):
     free_cash_flow_per_share: float | None
     fcff_per_share: float | None
     fcfe_per_share: float | None
+    created_at: str = None
+    updated_at: str = None
+    is_deleted: bool
 
 
 class FinancialMetricsResponse(BaseModel):

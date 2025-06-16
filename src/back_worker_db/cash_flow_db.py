@@ -138,7 +138,7 @@ class CashFlowDB:
                 return result[0]
             else:
                 return None
-    def get_cash_flow(self, ticker: str, start_date: str = None, end_date: str = None) -> list:
+    def get_cash_flow(self, ticker: str, start_date: str = None, end_date: str = None) -> list[CashFlowData]:
         """
         查询现金流量表数据
         :param ticker: 股票代码
@@ -146,21 +146,23 @@ class CashFlowDB:
         :param end_date: 结束日期
         :return: 现金流量表数据列表
         """
+        params = ['ticker = %s ']
+        values = [ticker]
+        if start_date:
+            params.append('report_date >= %s')
+            values.append(start_date)
+        if end_date:
+            params.append('report_date <= %s')
+            values.append(end_date)
+        params_str = ' AND '.join(params)
+        sql = f"""
+            SELECT *
+            FROM tb_cash_sina
+            WHERE {params_str}
+            ORDER BY id ASC
+        """
         with self.conn.cursor() as cur:
-            if start_date and end_date:
-                cur.execute("""
-                    SELECT *
-                    FROM tb_cash_sina
-                    WHERE ticker = %s AND report_date BETWEEN %s AND %s
-                    ORDER BY id ASC
-                """, (ticker, start_date, end_date))
-            else:
-                cur.execute("""
-                    SELECT *
-                    FROM tb_cash_sina
-                    WHERE ticker = %s
-                    ORDER BY id ASC
-                """, (ticker,))
+            cur.execute(sql, values)
             data_list = []
             for row in cur.fetchall():
                 data = CashFlowData.model_construct()

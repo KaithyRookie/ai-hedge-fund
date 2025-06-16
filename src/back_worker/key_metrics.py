@@ -22,6 +22,9 @@ class KeyMetricsWorker:
         # 遍历所有行
         for index, row in stock_financial_abstract_df.iterrows():
             data = KeyMetricsData.model_construct()
+            data.ticker = ticker
+            # 将 yyyymmdd 格式时间字符的转化在 yyyy-mm-dd 格式
+            data.report_date = datetime.datetime.strptime(index, '%Y%m%d').strftime('%Y-%m-%d')
             # 判断 归母净利润 是否是 nan，如果不是则赋值
             if not pd.isna(row['归母净利润']):
                 data.parent_company_net_profit = row['归母净利润']
@@ -156,6 +159,44 @@ class KeyMetricsWorker:
                 logging.error(f"insert key metrics error: {e}")
                 return False
         
+        return self.calculate_ticker_ebitbd(ticker)
+
+    def calculate_ticker_ebitbd(self, ticker:str):
+        """
+        计算 ticker 的 ebitda 指标
+        """
+        ebitda_dict = {}
+        stock_profit_sheet_by_report_em_df = ak.stock_profit_sheet_by_report_em(symbol=ticker)
+        for index, row in stock_profit_sheet_by_report_em_df.iterrows():
+            data_date = row['REPORT_DATE']
+            # 利息费用
+            interest_expense = row['FE_INTEREST_EXPENSE']
+            # 利润总额
+            profit_total = row['TOTAL_PROFIT']
+            ebitda = profit_total + interest_expense
+            ebitda_dict[data_date] = ebitda
+        stock_cash_flow_sheet_by_report_em_df = ak.stock_cash_flow_sheet_by_report_em(symbol=ticker)
+        for index, row in stock_cash_flow_sheet_by_report_em_df.iterrows():
+            data_date = row['REPORT_DATE']
+            # 固定资产和投资性房地产折旧
+            depreciation_and_amortization = row['FA_IR_DEPR']
+            # 无形资产摊销
+            amortization = row['IA_AMORTIZE']
+            # 长期待摊费用摊销
+            long_term_prepaid_expenses = row['LPE_AMORTIZE']
+
+            # EBITBD
+            ebitda = ebitda_dict[data_date]
+            ebitda_dict[data_date] = ebitda + depreciation_and_amortization + amortization + long_term_prepaid_expenses
+        
+        for report_date, ebitbd in ebitda_dict.items():
+            update_dict = {
+                'ebitbd': ebitbd
+            }
+            # 将 report_date 格式化为yyyy-mm-dd
+            try:
+                self.db.update_key_metrics(ticker, report_date, update_dict)
+            except Exception as e:
+                logging.error(f"update key metrics error: {e}")
+                return False
         return True
-
-

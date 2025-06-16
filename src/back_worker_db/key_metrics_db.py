@@ -117,7 +117,7 @@ class KeyMetricsDB:
             values.append(value)
         columns_str = ', '.join(columns)
         placeholders = ', '.join(['%s'] * len(values))
-        sql = f"INSERT INTO key_metrics ({columns_str}) VALUES ({placeholders})"
+        sql = f"INSERT INTO tb_key_metrics_sina ({columns_str}) VALUES ({placeholders})"
         with self.conn.cursor() as cursor:
             cursor.execute(sql, values)
         self.conn.commit()
@@ -127,7 +127,31 @@ class KeyMetricsDB:
         values = list(update_dict.values())
         values.append(ticker)
         values.append(report_date)
-        sql = f"UPDATE key_metrics SET {set_clause} WHERE ticker = %s AND report_date = %s"
+        sql = f"UPDATE tb_key_metrics_sina SET {set_clause} WHERE ticker = %s AND report_date = %s"
         with self.conn.cursor() as cursor:
             cursor.execute(sql, values)
         self.conn.commit()
+    
+    def query_key_metrics(self, ticker:str, start_date:str=None, end_date:str=None) ->list[KeyMetricsData]:
+        params = ['ticker = %s']
+        values = [ticker]
+        if start_date:
+            params.append('report_date >= %s')
+            values.append(start_date)
+        if end_date:
+            params.append('report_date <= %s')
+            values.append(end_date)
+        params_str = ' AND '.join(params)
+        sql = f"""
+            SELECT *
+            FROM tb_key_metrics_sina
+            WHERE {params_str}
+            ORDER BY id ASC
+        """
+        with self.conn.cursor() as cursor:
+            cursor.execute(sql, values)
+            data_list = []
+            for row in cursor.fetchall():
+                data_list.append(KeyMetricsData.model_validate(row))
+        return data_list
+

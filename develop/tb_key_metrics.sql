@@ -71,6 +71,7 @@ CREATE TABLE IF NOT EXISTS tb_key_metrics_sina (
     current_asset_turnover NUMERIC(10, 6),  -- 流动资产周转率
     current_asset_days NUMERIC(10, 6),  -- 流动资产周转天数
     accounts_payable_turnover NUMERIC(10, 6),  -- 应付账款周转率
+    ebitbd NUMERIC(10, 6),  -- 息税前利润(EBITDA)
     created_at TIMESTAMP,
     updated_at TIMESTAMP,
     is_deleted BOOLEAN DEFAULT FALSE
