@@ -24,6 +24,7 @@ class InsideTradeData(BaseModel):
     executive_position: Optional[str] = Field(None, max_length=100, description="董监高职务")
     created_at: Optional[datetime] = Field(None, description="创建时间")
     updated_at: Optional[datetime] = Field(None, description="更新时间")
+    is_deleted: bool
     
     class Config:
         # 启用 ORM 模式，便于与 SQLAlchemy 等 ORM 框架集成
@@ -50,7 +51,21 @@ class InsideTradeDB:
     
     def __init__(self, conn: psycopg2.connect):
         self.conn = conn
-    
+
+    def get_cursor(self, commit: bool = True):
+        """获取数据库游标的上下文管理器"""
+        cursor = self.get_cursor(cursor_factory=RealDictCursor)
+        try:
+            yield cursor
+            if commit:
+                self.conn.commit()
+        except Exception as e:
+            self.conn.rollback()
+            logging.error(f"Database operation failed: {e}")
+            raise
+        finally:
+            cursor.close()
+
     def insert(self, trade_data: InsideTradeData) -> int:
         """插入一条内部交易记录
         
@@ -72,20 +87,23 @@ class InsideTradeDB:
         ) RETURNING id
         """
         
-        with self.conn.cursor() as cursor:
-            cursor.execute(sql, {
-                'stock_code': trade_data.stock_code,
-                'stock_name': trade_data.stock_name,
-                'change_date': trade_data.change_date,
-                'change_person': trade_data.change_person,
-                'change_shares': trade_data.change_shares,
-                'avg_price': trade_data.avg_price,
-                'shares_after_change': trade_data.shares_after_change,
-                'relation_to_executive': trade_data.relation_to_executive,
-                'executive_position': trade_data.executive_position
-            })
-            record_id = cursor.fetchone()[0]
-            self.conn.commit()
+        with self.get_cursor() as cursor:
+            try:
+                cursor.execute(sql, {
+                    'stock_code': trade_data.stock_code,
+                    'stock_name': trade_data.stock_name,
+                    'change_date': trade_data.change_date,
+                    'change_person': trade_data.change_person,
+                    'change_shares': trade_data.change_shares,
+                    'avg_price': trade_data.avg_price,
+                    'shares_after_change': trade_data.shares_after_change,
+                    'relation_to_executive': trade_data.relation_to_executive,
+                    'executive_position': trade_data.executive_position
+                })
+                record_id = cursor.fetchone()[0]
+            except psycopg2.Error as e:
+                logging.error(f"Failed to insert inside trade record: {e}")
+                raise e
             return record_id
     
     def batch_insert(self, trade_data_list: List[InsideTradeData]) -> List[int]:
@@ -110,24 +128,27 @@ class InsideTradeDB:
         """
         
         record_ids = []
-        with self.conn.cursor() as cursor:
+        with self.get_cursor() as cursor:
             for trade_data in trade_data_list:
-                cursor.execute(sql, {
-                    'stock_code': trade_data.stock_code,
-                    'stock_name': trade_data.stock_name,
-                    'change_date': trade_data.change_date,
-                    'change_person': trade_data.change_person,
-                    'change_shares': trade_data.change_shares,
-                    'avg_price': trade_data.avg_price,
-                    'shares_after_change': trade_data.shares_after_change,
-                    'relation_to_executive': trade_data.relation_to_executive,
-                    'executive_position': trade_data.executive_position
-                })
-                record_ids.append(cursor.fetchone()[0])
-            self.conn.commit()
+                try:
+                    cursor.execute(sql, {
+                        'stock_code': trade_data.stock_code,
+                        'stock_name': trade_data.stock_name,
+                        'change_date': trade_data.change_date,
+                        'change_person': trade_data.change_person,
+                        'change_shares': trade_data.change_shares,
+                        'avg_price': trade_data.avg_price,
+                        'shares_after_change': trade_data.shares_after_change,
+                        'relation_to_executive': trade_data.relation_to_executive,
+                        'executive_position': trade_data.executive_position
+                    })
+                    record_ids.append(cursor.fetchone()[0])
+                except psycopg2.Error as e:
+                    logging.error(f"Failed to insert inside trade record: {e}")
+                    raise e
         return record_ids
     
-    def select_by_id(self, record_id: int) -> Optional[Dict[str, Any]]:
+    def select_by_id(self, record_id: int) -> Optional[InsideTradeData]:
         """根据 ID 查询单条记录
         
         Args:
@@ -138,12 +159,16 @@ class InsideTradeDB:
         """
         sql = "SELECT * FROM tb_inside_trade WHERE id = %s"
         
-        with self.conn.cursor(cursor_factory=RealDictCursor) as cursor:
-            cursor.execute(sql, (record_id,))
-            result = cursor.fetchone()
-            return dict(result) if result else None
+        with self.get_cursor(False) as cursor:
+            try:
+                cursor.execute(sql, (record_id,))
+                result = cursor.fetchone()
+                return InsideTradeData(**result) if result else None
+            except psycopg2.Error as e:
+                logging.error(f"Failed to select inside trade record: {e}")
+                raise e
     
-    def select_by_stock_code(self, stock_code: str, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
+    def select_by_stock_code(self, stock_code: str, limit: int = 100, offset: int = 0) -> List[InsideTradeData]:
         """根据股票代码查询记录
         
         Args:
@@ -160,14 +185,17 @@ class InsideTradeDB:
         ORDER BY change_date DESC 
         LIMIT %s OFFSET %s
         """
-        
-        with self.conn.cursor(cursor_factory=RealDictCursor) as cursor:
-            cursor.execute(sql, (stock_code, limit, offset))
-            results = cursor.fetchall()
-            return [dict(row) for row in results]
+        with self.get_cursor(False) as cursor:
+            try:
+                cursor.execute(sql, (stock_code, limit, offset))
+                results = cursor.fetchall()
+                return [InsideTradeData(**result) for result in results]
+            except psycopg2.Error as e:
+                logging.error(f"Failed to select inside trade records: {e}")
+                raise e
     
     def select_by_date_range(self, start_date: date, end_date: date, 
-                           stock_code: Optional[str] = None) -> List[Dict[str, Any]]:
+                           stock_code: Optional[str] = None) -> List[InsideTradeData]:
         """根据日期范围查询记录
         
         Args:
@@ -189,33 +217,17 @@ class InsideTradeDB:
             params.append(stock_code)
         
         sql += " ORDER BY change_date DESC"
-        
-        with self.conn.cursor(cursor_factory=RealDictCursor) as cursor:
-            cursor.execute(sql, params)
-            results = cursor.fetchall()
-            return [dict(row) for row in results]
+        with self.get_cursor(False) as cursor:
+            try:
+                cursor.execute(sql, tuple(params))
+                results = cursor.fetchall()
+                return [InsideTradeData(**result) for result in results]
+            except psycopg2.Error as e:
+                logging.error(f"Failed to select inside trade records: {e}")
+                raise e 
+
     
-    def select_by_person(self, change_person: str) -> List[Dict[str, Any]]:
-        """根据变动人查询记录
-        
-        Args:
-            change_person: 变动人姓名
-            
-        Returns:
-            List[Dict[str, Any]]: 查询结果列表
-        """
-        sql = """
-        SELECT * FROM tb_inside_trade 
-        WHERE change_person = %s 
-        ORDER BY change_date DESC
-        """
-        
-        with self.conn.cursor(cursor_factory=RealDictCursor) as cursor:
-            cursor.execute(sql, (change_person,))
-            results = cursor.fetchall()
-            return [dict(row) for row in results]
-    
-    def select_all(self, limit: int = 1000, offset: int = 0) -> List[Dict[str, Any]]:
+    def select_all(self, limit: int = 1000, offset: int = 0) -> List[InsideTradeData]:
         """查询所有记录
         
         Args:
@@ -230,11 +242,14 @@ class InsideTradeDB:
         ORDER BY change_date DESC 
         LIMIT %s OFFSET %s
         """
-        
-        with self.conn.cursor(cursor_factory=RealDictCursor) as cursor:
-            cursor.execute(sql, (limit, offset))
-            results = cursor.fetchall()
-            return [dict(row) for row in results]
+        with self.get_cursor(False) as cursor:
+            try:
+                cursor.execute(sql, (limit, offset))
+                results = cursor.fetchall()
+                return [InsideTradeData(**result) for result in results]
+            except psycopg2.Error as e:
+                logging.error(f"Failed to select all inside trade records: {e}")
+                raise e 
     
     def update_by_id(self, record_id: int, trade_data: InsideTradeData) -> bool:
         """根据 ID 更新记录
@@ -261,21 +276,24 @@ class InsideTradeDB:
         WHERE id = %(id)s
         """
         
-        with self.conn.cursor() as cursor:
-            cursor.execute(sql, {
-                'id': record_id,
-                'stock_code': trade_data.stock_code,
-                'stock_name': trade_data.stock_name,
-                'change_date': trade_data.change_date,
-                'change_person': trade_data.change_person,
-                'change_shares': trade_data.change_shares,
-                'avg_price': trade_data.avg_price,
-                'shares_after_change': trade_data.shares_after_change,
-                'relation_to_executive': trade_data.relation_to_executive,
-                'executive_position': trade_data.executive_position
-            })
-            affected_rows = cursor.rowcount
-            self.conn.commit()
+        with self.get_cursor() as cursor:
+            try:
+                cursor.execute(sql, {
+                    'id': record_id,
+                    'stock_code': trade_data.stock_code,
+                    'stock_name': trade_data.stock_name,
+                    'change_date': trade_data.change_date,
+                    'change_person': trade_data.change_person,
+                    'change_shares': trade_data.change_shares,
+                    'avg_price': trade_data.avg_price,
+                    'shares_after_change': trade_data.shares_after_change,
+                    'relation_to_executive': trade_data.relation_to_executive,
+                    'executive_position': trade_data.executive_position
+                })
+                affected_rows = cursor.rowcount
+            except psycopg2.Error as e:
+                logging.error(f"Failed to update inside trade record: {e}")
+                raise e
             return affected_rows > 0
     
     def delete_by_id(self, record_id: int) -> bool:
@@ -289,10 +307,13 @@ class InsideTradeDB:
         """
         sql = "DELETE FROM tb_inside_trade WHERE id = %s"
         
-        with self.conn.cursor() as cursor:
-            cursor.execute(sql, (record_id,))
-            affected_rows = cursor.rowcount
-            self.conn.commit()
+        with self.get_cursor() as cursor:
+            try:
+                cursor.execute(sql, (record_id,))
+                affected_rows = cursor.rowcount
+            except psycopg2.Error as e:
+                logging.error(f"Failed to delete inside trade record: {e}")
+                raise e
             return affected_rows > 0
     
     def delete_by_stock_code(self, stock_code: str) -> int:
@@ -306,53 +327,38 @@ class InsideTradeDB:
         """
         sql = "DELETE FROM tb_inside_trade WHERE stock_code = %s"
         
-        with self.conn.cursor() as cursor:
-            cursor.execute(sql, (stock_code,))
-            affected_rows = cursor.rowcount
-            self.conn.commit()
+        with self.get_cursor() as cursor:
+            try:
+                cursor.execute(sql, (stock_code,))
+                affected_rows = cursor.rowcount
+            except psycopg2.Error as e:
+                logging.error(f"Failed to delete inside trade records: {e}")
+                raise e
             return affected_rows
     
-    def delete_by_date_range(self, start_date: date, end_date: date) -> int:
-        """根据日期范围删除记录
-        
-        Args:
-            start_date: 开始日期
-            end_date: 结束日期
-            
-        Returns:
-            int: 删除的记录数量
-        """
-        sql = "DELETE FROM tb_inside_trade WHERE change_date BETWEEN %s AND %s"
-        
-        with self.conn.cursor() as cursor:
-            cursor.execute(sql, (start_date, end_date))
-            affected_rows = cursor.rowcount
-            self.conn.commit()
-            return affected_rows
     
-    def count_total(self) -> int:
-        """统计总记录数
-        
-        Returns:
-            int: 总记录数
-        """
-        sql = "SELECT COUNT(*) FROM tb_inside_trade"
-        
-        with self.conn.cursor() as cursor:
-            cursor.execute(sql)
-            return cursor.fetchone()[0]
-    
-    def count_by_stock_code(self, stock_code: str) -> int:
-        """统计指定股票代码的记录数
-        
+
+    def check_record_exists(self, stock_code: str, change_date: date, change_person: str) -> bool:
+        """检查是否存在重复记录
+
         Args:
             stock_code: 股票代码
-            
+            change_date: 变动日期
+            change_person: 变动人
+
         Returns:
-            int: 记录数
+            bool: 是否存在重复记录
         """
-        sql = "SELECT COUNT(*) FROM tb_inside_trade WHERE stock_code = %s"
-        
-        with self.conn.cursor() as cursor:
-            cursor.execute(sql, (stock_code,))
-            return cursor.fetchone()[0]
+        sql = f"""
+        SELECT COUNT(*) FROM tb_inside_trade
+        WHERE stock_code = '{stock_code}' AND change_date = '{change_date}' AND change_person = '{change_person}'
+        """
+
+        with self.get_cursor(False) as cursor:
+            try:
+                cursor.execute(sql)
+                count = cursor.fetchone()[0]
+                return count > 0
+            except psycopg2.Error as e:
+                logging.error(f"Failed to check record existence: {e}")
+                raise e

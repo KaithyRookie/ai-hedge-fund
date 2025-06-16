@@ -72,9 +72,9 @@ CREATE TABLE IF NOT EXISTS tb_key_metrics (
     current_asset_days NUMERIC(10, 6),  -- 流动资产周转天数
     accounts_payable_turnover NUMERIC(10, 6),  -- 应付账款周转率
     ebitbd NUMERIC(10, 6),  -- 息税前利润(EBITDA)
-    created_at TIMESTAMP,
-    updated_at TIMESTAMP,
-    is_deleted BOOLEAN DEFAULT FALSE
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, -- '创建时间'
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, -- '更新时间'
+    is_deleted BOOLEAN DEFAULT FALSE -- '是否删除'
 );
 
 CREATE INDEX IF NOT EXISTS idx_ticker_report_date ON tb_key_metrics (ticker, report_date);

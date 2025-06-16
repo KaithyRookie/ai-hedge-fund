@@ -1,7 +1,9 @@
 import psycopg2
 from psycopg2.extras import DictCursor
-from typing import Optional
 from pydantic import BaseModel
+import logging
+from datetime import datetime
+
 class BalanceSheetData(BaseModel):
     id: int = None
     ticker: str = None
@@ -156,11 +158,11 @@ class BalanceSheetData(BaseModel):
     currency: str = None
     report_type: str = None
     update_date: str = None
-    created_at: str = None
-    updated_at: str = None
+    created_at: datetime = None
+    updated_at: datetime = None
     is_deleted: bool
 
-
+from psycopg2.extras import RealDictCursor
 class BalanceDB:
     def __init__(self, conn: psycopg2.connect):
         self.conn = conn
@@ -169,9 +171,23 @@ class BalanceDB:
         if hasattr(self, 'conn'):
             self.conn.close()
 
+    def get_cursor(self, commit: bool = True):
+        """获取数据库游标的上下文管理器"""
+        cursor = self.conn.cursor(cursor_factory=RealDictCursor)
+        try:
+            yield cursor
+            if commit:
+                self.conn.commit()
+        except Exception as e:
+            self.conn.rollback()
+            logging.error(f"Database operation failed: {e}")
+            raise
+        finally:
+            cursor.close()
+
     def get_latest_balance_report_date(self, ticker: str) -> str:
         """获取最新的资产负债表报告日期"""
-        with self.conn.cursor() as cur:
+        with self.get_cursor(False) as cur:
             cur.execute("""
                 SELECT report_date
                 FROM tb_balance_sina
@@ -179,12 +195,16 @@ class BalanceDB:
                 ORDER BY report_date DESC
                 LIMIT 1
             """, (ticker,)) 
-            result = cur.fetchone()
-            return result[0] if result else None
+            try:
+                result = cur.fetchone()
+                return result[0] if result else None
+            except Exception as e:
+                logging.error(f"Error fetching latest report date: {e}")
+                raise e
 
     def insert_balance_sheet(self, data: BalanceSheetData):
         """插入单条资产负债表数据"""
-        with self.conn.cursor() as cur:
+        with self.get_cursor() as cur:
             columns = []
             values = []
             kwargs = data.model_dump(exclude={'id', 'created_at', 'update_at', 'is_deleted'})
@@ -195,11 +215,15 @@ class BalanceDB:
                 values.append(value)
             columns_str = ', '.join(columns)
             placeholders = ', '.join(['%s'] * len(values))
-            cur.execute(f"""
-                INSERT INTO tb_balance_sina ({columns_str})
-                VALUES ({placeholders})
-            """, values)
-            self.conn.commit()
+            try:
+                cur.execute(f"""
+                    INSERT INTO tb_balance_sina ({columns_str})
+                    VALUES ({placeholders})
+                """, values)
+            except Exception as e:
+                logging.error(f"Error inserting balance sheet data: {e}")
+                raise e
+
 
     def get_balance_sheet(self, ticker: str, start_date: str=None,  end_date: str = None) -> list[BalanceSheetData]:
         """查询资产负债表数据"""
@@ -219,35 +243,35 @@ class BalanceDB:
             WHERE {params_str}
             ORDER BY report_date DESC
         """
-        with self.conn.cursor(cursor_factory=DictCursor) as cur:
-            cur.execute(sql, values)
-            data_list = []
-            for row in cur.fetchall():
-                data = BalanceSheetData()
-                for key, value in row.items():
-                    if value is None:
-                        continue  # 跳过None值，避免TypeError: Object of type NoneType is not JSON serializable
-                    if key == 'created_at' or key == 'update_at':
-                        value = datetime.strptime(value, '%Y-%m-%d %H:%M:%S')
-                    setattr(data, key, value)
-                data_list.append(data)
-            return data_list
-
+        with self.get_cursor(commit=False) as cur:
+            try:
+                cur.execute(sql, values)
+                data_list = []
+                for row in cur.fetchall():
+                    data_list.append(BalanceSheetData(**row)) 
+                return data_list
+            except Exception as e:
+                logging.error(f"Error fetching balance sheet data: {e}")
+                raise e
 
     def delete_balance_sheet(self, ticker: str, start_date: str,  end_date: str = None):
         """删除资产负债表数据"""
-        with self.conn.cursor() as cur:
-            if start_date and end_date:
-                cur.execute("""
-                    DELETE FROM tb_balance_sina
-                    WHERE ticker = %s AND report_period BETWEEN %s AND %s
-                """, (ticker, start_date, end_date))
-            else:
-                cur.execute("DELETE FROM tb_balance_sina WHERE ticker = %s", (ticker,))
-            self.conn.commit()
+        with self.get_cursor() as cur:
+            try:
+                if start_date and end_date:
+                    cur.execute("""
+                        DELETE FROM tb_balance_sina
+                        WHERE ticker = %s AND report_date BETWEEN %s AND %s
+                    """, (ticker, start_date, end_date))
+                else:
+                    cur.execute("DELETE FROM tb_balance_sina WHERE ticker = %s", (ticker,))
+            except Exception as e:
+                logging.error(f"Error deleting balance sheet data: {e}")
+                raise e
+
     def update_balance_by_dict(self, ticker: str, data_dict: dict):
         """根据字典更新资产负债表数据"""
-        with self.conn.cursor() as cur:
+        with self.get_cursor() as cur:
             # 构建 SET 子句
             set_clause = ', '.join([f"{key} = %s" for key in data_dict.keys()])
             # 构建完整的 SQL 语句
@@ -258,7 +282,10 @@ class BalanceDB:
             # 构建参数列表
             params = list(data_dict.values()) + [ticker]
             # 执行 SQL 语句
-            cur.execute(sql, params)
-            self.conn.commit()
+            try:
+                cur.execute(sql, params)
+            except Exception as e:
+                logging.error(f"Error updating balance sheet data: {e}")
+                raise e
 
 

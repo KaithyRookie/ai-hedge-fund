@@ -20,21 +20,18 @@ class StockWorker:
 
         for index, row in df.iterrows():
             ticker = row['代码']
-            name = row['名称']
             # 检查股票是否已经存在
             if not self.stock_db.check_stock_exists(ticker, StockType.A_SHARE):
+                logging.info(f"current download stock: {ticker}")
                 stock_data = self.generate_stock_data(row, StockType.A_SHARE)
                 try:
                     self.stock_db.add_stock(stock_data)
-                    logging.info(f"添加股票: {ticker} {name}")
+                    logging.info(f"添加股票: {ticker}")
                 except Exception as e:
                     logging.error(f"添加A股股票失败: {e}")
                     continue
-                if not self.download_company_facts(ticker):
-                    logging.error(f"下载公司facts失败: {ticker}")
-                    continue
             else:
-                logging.info(f"股票已存在: {ticker} {name}")
+                logging.info(f"股票已存在: {ticker}")
             
         logging.info("沪深京A股所有股票信息添加完成")
 
@@ -47,7 +44,8 @@ class StockWorker:
         for index, row in df.iterrows():
             ticker = row['代码']
             # 检查股票是否已经存在
-            if self.stock_db.check_stock_exists(ticker, StockType.B_SHARE) is None:
+            if not self.stock_db.check_stock_exists(ticker, StockType.B_SHARE):
+                logging.info(f"current download B stock: {ticker}")
                 stock_data = self.generate_stock_data(row, StockType.B_SHARE)
                 try:
                     self.stock_db.add_stock(stock_data)
@@ -55,6 +53,7 @@ class StockWorker:
                 except Exception as e:
                     logging.error(f"添加A股股票失败: {e}")
                     continue
+
             else:
                 logging.info(f"股票已存在: {ticker} ")
         logging.info("沪深京B股所有股票信息添加完成")
@@ -68,16 +67,17 @@ class StockWorker:
         for index, row in df.iterrows():
             ticker = row['代码']
             # 检查股票是否已经存在
-            if self.stock_db.check_stock_exists(ticker, StockType.US_STOCK) is None:
+            if not self.stock_db.check_stock_exists(ticker, StockType.US_STOCK):
+                logging.info(f"current download US stock: {ticker}")
                 stock_data = self.generate_stock_data(row, StockType.US_STOCK)
                 try:
                     self.stock_db.add_stock(stock_data)
-                    logging.info(f"添加股票: {ticker} {name}")
+                    logging.info(f"添加股票: {ticker}")
                 except Exception as e:
                     logging.error(f"添加美股股票失败: {e}")
                     continue
             else:
-                logging.info(f"股票已存在: {ticker} {name}")
+                logging.info(f"股票已存在: {ticker}")
         logging.info("美股所有股票信息添加完成")
 
         try:
@@ -88,16 +88,17 @@ class StockWorker:
         for index, row in df.iterrows():
             ticker = row['代码']
             # 检查股票是否已经存在
-            if self.stock_db.check_stock_exists(ticker, StockType.HK_STOCK) is None:
+            if not self.stock_db.check_stock_exists(ticker, StockType.HK_STOCK):
+                logging.info(f"current download HK stock: {ticker}")
                 stock_data = self.generate_stock_data(row, StockType.HK_STOCK)
                 try:
                     self.stock_db.add_stock(stock_data)
-                    logging.info(f"添加股票: {ticker} {name}")
+                    logging.info(f"添加股票: {ticker} ")
                 except Exception as e:
                     logging.error(f"添加港股股票失败: {e}")
                     continue
             else:
-                logging.info(f"股票已存在: {ticker} {name}")
+                logging.info(f"股票已存在: {ticker} ")
 
         logging.info("港股所有股票信息添加完成")
 
@@ -124,11 +125,11 @@ class StockWorker:
         stock_data = StockData.model_construct()
         stock_data.ticker = ticker
         stock_data.ticker_name = name
-        stock_data.stock_type = stock_type
+        stock_data.stock_type = stock_type.to_string()
         stock_data.serial_number = row['序号']
         return stock_data
     
-    def download_company_facts(self, ticker:str):
+    def download_stock_zh_company_facts(self, ticker:str):
         stock_profile_cninfo_df = ak.stock_profile_cninfo(symbol=ticker)
         for index, row in stock_profile_cninfo_df.iterrows():
             company_fact_data = CompanyFactData.model_construct()

@@ -2,6 +2,8 @@ import psycopg2
 from typing import Optional
 from datetime import datetime
 from pydantic import BaseModel
+from psycopg2.extras import RealDictCursor
+import logging
 class CashFlowData(BaseModel):
     id: Optional[int]
     ticker: Optional[str] # 股票代码
@@ -76,21 +78,28 @@ class CashFlowData(BaseModel):
     currency: Optional[str] #币种
     report_type: Optional[str] #类型
     update_date: Optional[str] #更新日期
-    created_at: Optional[datetime] 
-    update_at: Optional[datetime]
+    created_at: Optional[datetime]
+    updated_at: Optional[datetime]
     is_deleted: bool
 
 
 class CashFlowDB:
     def __init__(self, conn: psycopg2.connect):
         self.conn = conn
-    
-    def __del__(self):
-        """
-        析构函数，关闭数据库连接
-        """
-        if hasattr(self, 'conn'):
-            self.conn.close()
+
+    def get_cursor(self, commit: bool = True):
+        """获取数据库游标的上下文管理器"""
+        cursor = self.get_cursor(cursor_factory=RealDictCursor)
+        try:
+            yield cursor
+            if commit:
+                self.conn.commit()
+        except Exception as e:
+            self.conn.rollback()
+            logging.error(f"Database operation failed: {e}")
+            raise
+        finally:
+            cursor.close()
 
     def insert_cash_flow(self, data: CashFlowData):
         """
@@ -113,31 +122,40 @@ class CashFlowDB:
         columns_str = ', '.join(columns)
         placeholders = ', '.join(['%s'] * len(values))
         
-        with self.conn.cursor() as cur:
-            cur.execute(f"""
-                INSERT INTO tb_cash_sina ({columns_str})
-                VALUES ({placeholders})
-            """, values)
-            self.conn.commit()
+        with self.get_cursor() as cur:
+            try:
+                cur.execute(f"""
+                    INSERT INTO tb_cash_sina ({columns_str})
+                    VALUES ({placeholders})
+                """, values)
+            except psycopg2.errors.UniqueViolation:
+                logging.warning(f"Data for ticker {ticker} and report date {report_date} already exists. Skipping insertion.")
+            except Exception as e:
+                logging.error(f"Error inserting data for ticker {ticker} and report date {report_date}: {e}")
+                raise e
     def get_latest_cash_flow_report_date(self, ticker: str) -> str:
         """
         获取最新现金流量表的报告期
         :param ticker: 股票代码
         :return: 最新报告期，如果没有数据则返回None
         """
-        with self.conn.cursor() as cur:
-            cur.execute("""
-                SELECT report_date
-                FROM tb_cash_sina
-                WHERE ticker = %s
-                ORDER BY report_date DESC
-                LIMIT 1
-            """, (ticker,))
-            result = cur.fetchone()
-            if result:
-                return result[0]
-            else:
-                return None
+        with self.get_cursor(False) as cur:
+            try:
+                cur.execute("""
+                    SELECT report_date
+                    FROM tb_cash_sina
+                    WHERE ticker = %s
+                    ORDER BY report_date DESC
+                    LIMIT 1
+                """, (ticker,))
+                result = cur.fetchone()
+                if result:
+                    return result[0]
+                else:
+                    return None
+            except Exception as e:
+                logging.error(f"Error getting latest report date for ticker {ticker}: {e}")
+                raise e
     def get_cash_flow(self, ticker: str, start_date: str = None, end_date: str = None) -> list[CashFlowData]:
         """
         查询现金流量表数据
@@ -161,19 +179,23 @@ class CashFlowDB:
             WHERE {params_str}
             ORDER BY id ASC
         """
-        with self.conn.cursor() as cur:
-            cur.execute(sql, values)
-            data_list = []
-            for row in cur.fetchall():
-                data = CashFlowData.model_construct()
-                for key, value in row.items():
-                    if value is None:
-                        continue  # 跳过None值，避免TypeError: Object of type NoneType is not JSON serializable
-                    if key == 'created_at' or key == 'update_at':
-                        value = datetime.strptime(value, '%Y-%m-%d %H:%M:%S')
-                    setattr(data, key, value)
-                data_list.append(data)
-            return data_list
+        with self.get_cursor(False) as cur:
+            try:
+                cur.execute(sql, values)
+                data_list = []
+                for row in cur.fetchall():
+                    data = CashFlowData.model_construct()
+                    for key, value in row.items():
+                        if value is None:
+                            continue  # 跳过None值，避免TypeError: Object of type NoneType is not JSON serializable
+                        if key == 'created_at' or key == 'update_at':
+                            value = datetime.strptime(value, '%Y-%m-%d %H:%M:%S')
+                        setattr(data, key, value)
+                    data_list.append(data)
+                return data_list
+            except Exception as e:
+                logging.error(f"Error getting cash flow data for ticker {ticker}: {e}")
+                raise e
     def delete_cash_flow(self, ticker: str, start_date: str = None, end_date: str = None):
         """
         删除现金流量表数据
@@ -181,15 +203,18 @@ class CashFlowDB:
         :param start_date: 开始日期
         :param end_date: 结束日期
         """
-        with self.conn.cursor() as cur:
-            if start_date and end_date:
-                cur.execute("""
-                    DELETE FROM tb_cash_sina
-                    WHERE ticker = %s AND report_date BETWEEN %s AND %s
-                """, (ticker, start_date, end_date))
-            else:
-                cur.execute("DELETE FROM tb_cash_sina WHERE ticker = %s", (ticker,))
-            self.conn.commit()
+        with self.get_cursor() as cur:
+            try:
+                if start_date and end_date:
+                    cur.execute("""
+                        DELETE FROM tb_cash_sina
+                        WHERE ticker = %s AND report_date BETWEEN %s AND %s
+                    """, (ticker, start_date, end_date))
+                else:
+                    cur.execute("DELETE FROM tb_cash_sina WHERE ticker = %s", (ticker,))
+            except Exception as e:
+                logging.error(f"Error deleting cash flow data for ticker {ticker}: {e}")
+                raise e
 
     def update_cash_flow(self, ticker: str, report_date: str, **kwargs):
         """
@@ -204,10 +229,13 @@ class CashFlowDB:
         set_clauses = ', '.join([f"{key} = %s" for key in kwargs.keys()])
         values = list(kwargs.values()) + [ticker, report_date]
         
-        with self.conn.cursor() as cur:
-            cur.execute(f"""
-                UPDATE tb_cash_sina
-                SET {set_clauses}
-                WHERE ticker = %s AND report_date = %s
-            """, values)
-            self.conn.commit()
+        with self.get_cursor() as cur:
+            try:
+                cur.execute(f"""
+                    UPDATE tb_cash_sina
+                    SET {set_clauses}
+                    WHERE ticker = %s AND report_date = %s
+                """, values)
+            except Exception as e:
+                logging.error(f"Error updating cash flow data for ticker {ticker} and report date {report_date}: {e}")
+                raise e

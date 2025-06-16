@@ -260,7 +260,6 @@ class FinancialIndicatorsDB:
         """
         self.conn = conn
     
-    @contextmanager
     def get_cursor(self, commit: bool = True):
         """获取数据库游标的上下文管理器"""
         cursor = self.conn.cursor(cursor_factory=RealDictCursor)
@@ -312,22 +311,20 @@ class FinancialIndicatorsDB:
         Returns:
             创建后的财务指标数据（包含ID）
         """
-        insert_data = self._model_to_insert_data(data)
-        
-        # 构建 SQL 语句
-        columns = list(insert_data.keys())
-        placeholders = ['%s'] * len(columns)
-        values = [insert_data[col] for col in columns]
-        
-        query = sql.SQL("""
-            INSERT INTO tb_financial_indicators ({})
-            VALUES ({})
-            RETURNING *
-        """).format(
-            sql.SQL(', ').join(map(sql.Identifier, columns)),
-            sql.SQL(', ').join(sql.Placeholder() * len(columns))
-        )
-        
+        columns = []
+        values = []
+        kwargs = data.model_dump(exclude={'id', 'created_at', 'update_at', 'is_deleted'})
+        for key, value in kwargs.items():
+            if value is None:
+                continue
+            columns.append(key)
+            values.append(value)
+        columns_str = ', '.join(columns)
+        placeholders = ', '.join(['%s'] * len(values))
+        query = f"""
+                INSERT INTO tb_financial_indicators ({columns_str})
+                VALUES ({placeholders})
+            """
         with self.get_cursor() as cursor:
             try:
                 cursor.execute(query, values)
@@ -371,7 +368,7 @@ class FinancialIndicatorsDB:
         Returns:
             财务指标数据列表
         """
-        query = "SELECT * FROM tb_financial_indicators WHERE ticker = % and report_date = %s ORDER BY id"
+        query = "SELECT * FROM tb_financial_indicators WHERE ticker = %s and report_date = %s ORDER BY id"
         
         with self.get_cursor(commit=False) as cursor:
             try:
@@ -512,7 +509,7 @@ class FinancialIndicatorsDB:
         Returns:
             删除的记录数量
         """
-        query = "DELETE FROM tb_financial_indicators WHERE ticker = % AND report_date = %s"
+        query = "DELETE FROM tb_financial_indicators WHERE ticker = %s AND report_date = %s"
         
         with self.get_cursor() as cursor:
             try:
@@ -527,46 +524,44 @@ class FinancialIndicatorsDB:
     def bulk_create(self, data_list: List[FinancialIndicatorsData]) -> List[FinancialIndicatorsData]:
         """
         批量创建财务指标记录
-        
+
         Args:
             data_list: 财务指标数据列表
-            
+
         Returns:
             创建后的财务指标数据列表
         """
         if not data_list:
             return []
-        
+
         # 准备批量插入数据
         insert_data_list = [self._model_to_insert_data(data) for data in data_list]
-        
+
         # 获取所有字段（以第一条记录为准）
         columns = list(insert_data_list[0].keys())
-        
+
         with self.get_cursor() as cursor:
             try:
                 results = []
-                
+
                 # 构建批量插入 SQL
                 placeholders = ['%s'] * len(columns)
-                query = sql.SQL("""
-                    INSERT INTO tb_financial_indicators ({})
-                    VALUES ({})
+
+                query = sql.SQL(f"""
+                    INSERT INTO tb_financial_indicators ({sql.SQL(', ').join(map(sql.Identifier, columns))})
+                    VALUES ({sql.SQL(', ').join(sql.Placeholder() * len(columns))})
                     RETURNING *
-                """).format(
-                    sql.SQL(', ').join(map(sql.Identifier, columns)),
-                    sql.SQL(', ').join(sql.Placeholder() * len(columns))
-                )
-                
+                """)
+
                 for insert_data in insert_data_list:
                     values = [insert_data[col] for col in columns]
                     cursor.execute(query, values)
                     record = cursor.fetchone()
                     results.append(self._convert_record_to_model(dict(record)))
-                
+
                 logger.info(f"Bulk created {len(results)} financial indicator records")
                 return results
-                    
+
             except Exception as e:
                 logger.error(f"Error in bulk create: {e}")
                 raise
@@ -597,12 +592,10 @@ class FinancialIndicatorsDB:
         for insert_data in insert_data_list:
             values_list.append([insert_data[col] for col in columns])
         
-        query = sql.SQL("""
-            INSERT INTO tb_financial_indicators ({})
+        query = sql.SQL(f"""
+            INSERT INTO tb_financial_indicators ({sql.SQL(', ').join(map(sql.Identifier, columns))})
             VALUES %s
-        """).format(
-            sql.SQL(', ').join(map(sql.Identifier, columns))
-        )
+        """)
         
         with self.get_cursor() as cursor:
             try:
@@ -709,18 +702,13 @@ class FinancialIndicatorsDB:
         # 构建 ON CONFLICT 子句
         update_clauses = [f"{col} = EXCLUDED.{col}" for col in columns if col not in unique_fields + ['updated_at']]
         
-        query = sql.SQL("""
-            INSERT INTO tb_financial_indicators ({})
-            VALUES ({})
-            ON CONFLICT ({}) DO UPDATE SET
-            {}
+        query = sql.SQL(f"""
+            INSERT INTO tb_financial_indicators ({sql.SQL(', ').join(map(sql.Identifier, columns))})
+            VALUES ({sql.SQL(', ').join(sql.Placeholder() * len(columns))})
+            ON CONFLICT ({sql.SQL(', ').join(map(sql.Identifier, unique_fields))}) DO UPDATE SET
+            {sql.SQL(', ').join(map(sql.SQL, update_clauses))}
             RETURNING *
-        """).format(
-            sql.SQL(', ').join(map(sql.Identifier, columns)),
-            sql.SQL(', ').join(sql.Placeholder() * len(columns)),
-            sql.SQL(', ').join(map(sql.Identifier, unique_fields)),
-            sql.SQL(', ').join(map(sql.SQL, update_clauses))
-        )
+        """)
         
         with self.get_cursor() as cursor:
             try:

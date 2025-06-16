@@ -1,6 +1,7 @@
 from src.back_worker_db.financial_indicators_db import FinancialIndicatorsDB, FinancialIndicatorsData
 import akshare as ak
 import logging
+import datetime
 
 class FinancialIndicatorsWorker:
     def __init__(self, db: FinancialIndicatorsDB):

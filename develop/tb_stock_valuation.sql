@@ -15,9 +15,9 @@ CREATE TABLE IF NOT EXISTS tb_stock_valuation (
     peg_ratio DECIMAL(10, 8),  -- PEG值
     pc_ratio DECIMAL(10, 8),  -- 市现率
     ps_ratio DECIMAL(10, 8),  -- 市销率
-    created_at TIMESTAMP,
-    updated_at TIMESTAMP,
-    is_deleted BOOLEAN DEFAULT FALSE
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, -- '创建时间'
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, -- '更新时间'
+    is_deleted BOOLEAN DEFAULT FALSE -- '是否删除'
 );
 
 CREATE INDEX IF NOT EXISTS idx_ticker_data_date ON tb_stock_valuation (ticker, data_date);

@@ -73,7 +73,7 @@ CREATE TABLE IF NOT EXISTS  tb_cash_sina (
     report_type VARCHAR(50) , -- '类型',
     update_date TIMESTAMP , -- '更新日期',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, -- '创建时间'
-    update_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, -- '更新时间'
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, -- '更新时间'
     is_deleted BOOLEAN DEFAULT FALSE -- '是否删除'
 );
 

@@ -1,6 +1,10 @@
 from src.back_worker_db.stock_price_db import StockPriceDB
-from src.back_worker_db.stock_db import StockType    
+from src.back_worker_db.stock_db import StockType
+from src.data.models import Price
 import logging
+import akshare as ak
+import datetime
+
 class StockPriceWorker:
     def __init__(self, stock_price_db: StockPriceDB):
         self.stock_price_db = stock_price_db

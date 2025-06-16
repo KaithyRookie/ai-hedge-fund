@@ -26,8 +26,9 @@ CREATE TABLE IF NOT EXISTS tb_company_facts (
     main_business TEXT , -- '主营业务',
     business_scope TEXT , -- '经营范围',
     company_profile TEXT , -- '机构简介',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, -- '创建时间'
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, -- '更新时间'
+    is_deleted BOOLEAN DEFAULT FALSE -- '是否删除'
 );
 
 -- 创建索引以提高查询性能

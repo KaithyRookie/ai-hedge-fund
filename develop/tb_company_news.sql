@@ -13,9 +13,9 @@ CREATE TABLE tb_company_news (
     key_factors TEXT,
     market_impact VARCHAR(20) CHECK (market_impact IN ('重大', '中等', '轻微', '无') OR market_impact IS NULL),
     impact_reason TEXT,
-    is_deleted BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, -- '创建时间'
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, -- '更新时间'
+    is_deleted BOOLEAN DEFAULT FALSE -- '是否删除'
 );
 
 -- 创建索引以提高查询性能
@@ -69,10 +69,3 @@ COMMENT ON COLUMN tb_company_news.is_deleted IS '是否删除';
 COMMENT ON COLUMN tb_company_news.created_at IS '创建时间';
 COMMENT ON COLUMN tb_company_news.updated_at IS '更新时间';
 
--- 创建视图：仅显示未删除的新闻
-CREATE VIEW v_active_company_news AS
-SELECT * FROM tb_company_news 
-WHERE is_deleted = FALSE;
-
--- 添加视图注释
-COMMENT ON VIEW v_active_company_news IS '活跃新闻视图（未删除的新闻）';

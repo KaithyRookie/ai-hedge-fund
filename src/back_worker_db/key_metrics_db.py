@@ -105,7 +105,19 @@ class KeyMetricsDB:
     def __del__(self):
         if hasattr(self, 'conn'):
             self.conn.close()
-    
+    def get_cursor(self, commit: bool = True):
+        """获取数据库游标的上下文管理器"""
+        cursor = self.get_cursor(cursor_factory=RealDictCursor)
+        try:
+            yield cursor
+            if commit:
+                self.conn.commit()
+        except Exception as e:
+            self.conn.rollback()
+            logging.error(f"Database operation failed: {e}")
+            raise
+        finally:
+            cursor.close()
     def insert_key_metrics(self, data:KeyMetricsData):
         columns = []
         values = []
@@ -118,9 +130,12 @@ class KeyMetricsDB:
         columns_str = ', '.join(columns)
         placeholders = ', '.join(['%s'] * len(values))
         sql = f"INSERT INTO tb_key_metrics_sina ({columns_str}) VALUES ({placeholders})"
-        with self.conn.cursor() as cursor:
-            cursor.execute(sql, values)
-        self.conn.commit()
+        with self.get_cursor() as cursor:
+            try:
+                cursor.execute(sql, values)
+            except psycopg2.Error as e:
+                logging.error(f"Failed to insert key metrics: {e}")
+                raise e
     
     def update_key_metrics(self, ticker:str, report_date:str, update_dict:dict):
         set_clause = ', '.join([f"{key} = %s" for key in update_dict.keys()])
@@ -128,9 +143,12 @@ class KeyMetricsDB:
         values.append(ticker)
         values.append(report_date)
         sql = f"UPDATE tb_key_metrics_sina SET {set_clause} WHERE ticker = %s AND report_date = %s"
-        with self.conn.cursor() as cursor:
-            cursor.execute(sql, values)
-        self.conn.commit()
+        with self.get_cursor() as cursor:
+            try:
+                cursor.execute(sql, values)
+            except psycopg2.Error as e:
+                logging.error(f"Failed to update key metrics: {e}")
+                raise e
     
     def query_key_metrics(self, ticker:str, start_date:str=None, end_date:str=None) ->list[KeyMetricsData]:
         params = ['ticker = %s']
@@ -148,10 +166,14 @@ class KeyMetricsDB:
             WHERE {params_str}
             ORDER BY id ASC
         """
-        with self.conn.cursor() as cursor:
-            cursor.execute(sql, values)
-            data_list = []
-            for row in cursor.fetchall():
-                data_list.append(KeyMetricsData.model_validate(row))
-        return data_list
+        with self.get_cursor(False) as cursor:
+            try:
+                cursor.execute(sql, values)
+                data_list = []
+                for row in cursor.fetchall():
+                    data_list.append(KeyMetricsData(**row))
+                return data_list
+            except psycopg2.Error as e:
+                logging.error(f"Failed to query key metrics: {e}")
+                raise e
 

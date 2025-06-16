@@ -4,9 +4,9 @@ CREATE TABLE IF NOT EXISTS tb_stock (
     ticker VARCHAR NOT NULL,  -- 代码
     ticker_name VARCHAR NOT NULL,  -- 名称
     stock_type VARCHAR,  -- 类型
-    created_at TIMESTAMP,
-    updated_at TIMESTAMP,
-    is_deleted BOOLEAN DEFAULT FALSE
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, -- '创建时间'
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, -- '更新时间'
+    is_deleted BOOLEAN DEFAULT FALSE -- '是否删除'
 );
 
 CREATE INDEX idx_tb_stock_ticker ON tb_stock (ticker, ticker_name);

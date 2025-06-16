@@ -6,7 +6,6 @@ from src.back_worker_db.key_metrics_db import KeyMetricsDB
 from src.back_worker_db.profit_db import ProfitDB
 from src.back_worker_db.stock_db import StockType
 from src.back_worker_db.financial_metrics_db import FinancialMetricsDB
-import akshare as ak
 from datetime import datetime, timedelta
 from src.back_worker_db.stock_valuation_db import StockValuationDB
 from src.data.models import FinancialMetrics
@@ -21,7 +20,7 @@ class FinancialMetricsManager:
         self.financial_indicators_db = financial_indicators_db
         self.stock_value_db = stock_value_db
 
-    def get_financial_metrics(self, ticker: str, stock_type: StockType):
+    def generate_financial_metrics(self, ticker: str, stock_type: StockType):
         if stock_type == StockType.HK:
             # stock_financial_metric_dict, financial_report_date_list = self.get_stock_hk_financial_metrics(ticker)
             pass
@@ -170,7 +169,7 @@ class FinancialMetricsManager:
                 if net_profit_margin:
                     metric_item.net_profit_margin = net_profit_margin
                 # NOPAT
-                nopat = operating_profit / (1 - actual_tax_rate)
+                nopat = operating_revenue / (1 - actual_tax_rate)
                 if nopat and investment_capital:
                     metric_item.roic = nopat / investment_capital
                 
@@ -223,6 +222,7 @@ class FinancialMetricsManager:
                 metric_item.fcfe_per_share = stock_key_metric.shareholder_fcf_per_share
                 metric_item.earnings_per_share = stock_key_metric.basic_eps
                 metric_item.book_value_per_share = stock_key_metric.net_assets_per_share
+
                 if stock_key_metric.ebitda and enterprise_value:
                     # 企业价值与 EBITDA 比率
                     metric_item.enterprise_value_to_ebitda_ratio = enterprise_value / stock_key_metric.ebitda
@@ -231,11 +231,11 @@ class FinancialMetricsManager:
                     # 在此期间每股收益增长
                     last_year_basic_eps = last_year_stock_key_metric.basic_eps
                     if last_year_basic_eps:
-                        metric_item.earnings_per_share_growth = (basic_eps - last_year_basic_eps) / last_year_basic_eps
+                        metric_item.earnings_per_share_growth = (stock_key_metric.basic_eps - last_year_basic_eps) / last_year_basic_eps
                     # EBITDA 增长
                     last_year_ebitda = last_year_stock_key_metric.ebitda
                     if last_year_ebitda:
-                        metric_item.ebitda_growth = (ebitda - last_year_ebitda) / last_year_ebitda
+                        metric_item.ebitda_growth = (stock_key_metric.ebitda - last_year_ebitda) / last_year_ebitda
             stock_financial_indicator = financial_indicator_dict.get(report_date, None)
             if stock_financial_indicator:
                metric_item.payout_ratio = stock_financial_indicator.dividend_payout_ratio

@@ -1,7 +1,7 @@
 
 from src.back_worker_db.company_news_db import CompanyNewsDB,CompanyNewsData
 from src.utils.news_sentiment_analysis import analysis_news_sentiment
-
+import akshare as ak
 class CompanyNewsWorker:
     def __init__(self, db:CompanyNewsDB):
         self.db = db

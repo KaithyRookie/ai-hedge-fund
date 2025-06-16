@@ -26,6 +26,19 @@ class StockValuationData(BaseModel):
 class StockValuationDB:
     def __init__(self, conn):
         self.conn = conn
+    def get_cursor(self, commit: bool = True):
+        """获取数据库游标的上下文管理器"""
+        cursor = self.get_cursor(cursor_factory=RealDictCursor)
+        try:
+            yield cursor
+            if commit:
+                self.conn.commit()
+        except Exception as e:
+            self.conn.rollback()
+            logging.error(f"Database operation failed: {e}")
+            raise
+        finally:
+            cursor.close()
 
     def add_stock_valuation(self, data: StockValuationData):
         """添加股票估值数据到数据库中"""
@@ -40,18 +53,28 @@ class StockValuationDB:
         columns_str = ', '.join(columns)
         placeholders = ', '.join(['%s'] * len(values))
         sql = f"INSERT INTO stock_valuation ({columns_str}) VALUES ({placeholders})"
-        with self.conn.cursor() as cur:
-            cur.execute(sql, tuple(values))
-            self.conn.commit()
+        with self.get_cursor() as cur:
+            try:
+                cur.execute(sql, values)
+            except psycopg2.errors.UniqueViolation as e:
+                logging.warning(f"Duplicate data found for ticker {data.ticker} and data_date {data.data_date}. Skipping insertion.")
+                raise e
+            except Exception as e:
+                logging.error(f"Error inserting data: {e}")
+                raise e
     def get_latest_stock_valuation_date(self, ticker: str):
         """获取最新的股票估值数据"""
         sql = "SELECT data_date FROM tb_stock_valuation WHERE ticker = %s ORDER BY data_date DESC LIMIT 1"
-        with self.conn.cursor() as cur:
-            cur.execute(sql, (ticker,))
-            result = cur.fetchone()
-            if result:
-                return result[0]
-            return None
+        with self.get_cursor(False) as cur:
+            try:
+                cur.execute(sql, (ticker,))
+                result = cur.fetchone()
+                if result:
+                    return result[0]
+                return None
+            except Exception as e: 
+                logging.error(f"Error fetching latest stock valuation date: {e}")
+                raise e
 
     def query_stock_valuation(self, ticker: str, start_date:str=None, end_date: str = None) -> list[StockValuationData]:
         """
@@ -70,12 +93,16 @@ class StockValuationDB:
             values.append(end_date)
         sql = f"SELECT * FROM tb_stock_valuation WHERE {' AND '.join(params)}"
         
-        with self.conn.cursor() as cur:
-            cur.execute(sql, values)
-            data_list = []
-            for row in cur.fetchall():
-                data_list.append(StockValuationData.model_validate(row))
-            return data_list
+        with self.get_cursor(False) as cur:
+            try:
+                cur.execute(sql, values)
+                data_list = []
+                for row in cur.fetchall():
+                    data_list.append(StockValuationData(**row))
+                return data_list
+            except Exception as e:
+                logging.error(f"Error fetching data for ticker {ticker}: {e}")
+                raise e
 
     def update_stock_valuation(self, ticker: str, data_date: str, update_data: dict):
         """
@@ -88,9 +115,12 @@ class StockValuationDB:
         values = list(update_data.values()) + [ticker, data_date]
         sql = f"UPDATE tb_stock_valuation SET {set_clause} WHERE ticker = %s AND data_date = %s"
         
-        with self.conn.cursor() as cur:
-            cur.execute(sql, values)
-            self.conn.commit()
+        with self.get_cursor() as cur:
+            try:
+                cur.execute(sql, values)
+            except Exception as e:
+                logging.error(f"Error updating data for ticker {ticker} and data_date {data_date}: {e}")
+                raise e
 
     def delete_stock_valuation(self, ticker: str, data_date: str = None):
         """
@@ -105,6 +135,9 @@ class StockValuationDB:
             sql = "DELETE FROM tb_stock_valuation WHERE ticker = %s"
             params = (ticker,)
         
-        with self.conn.cursor() as cur:
-            cur.execute(sql, params)
-            self.conn.commit()
+        with self.get_cursor() as cur:
+            try:
+                cur.execute(sql, params)
+            except Exception as e:
+                logging.error(f"Error deleting data for ticker {ticker} and data_date {data_date}: {e}")
+                raise e

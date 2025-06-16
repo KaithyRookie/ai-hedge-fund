@@ -42,6 +42,7 @@ class CompanyFactData(BaseModel):
     company_profile: Optional[str] = Field(None, description="机构简介")
     created_at: Optional[datetime] = Field(None, description="创建时间")
     updated_at: Optional[datetime] = Field(None, description="更新时间")
+    is_deleted: bool
 
     class Config:
         """Pydantic 配置"""
@@ -77,20 +78,19 @@ class CompanyFactDB:
         self.conn = conn
         self.table_name = "tb_company_facts"
     
-    def _execute_query(self, query: str, params: tuple = None, fetch: bool = True) -> Optional[List[Dict]]:
-        """执行SQL查询的通用方法"""
+    def get_cursor(self, commit: bool = True):
+        """获取数据库游标的上下文管理器"""
+        cursor = self.get_cursor(cursor_factory=RealDictCursor)
         try:
-            with self.conn.cursor(cursor_factory=RealDictCursor) as cursor:
-                cursor.execute(query, params)
-                if fetch:
-                    return cursor.fetchall()
-                else:
-                    self.conn.commit()
-                    return cursor.rowcount
+            yield cursor
+            if commit:
+                self.conn.commit()
         except Exception as e:
             self.conn.rollback()
-            logging.error(f"数据库操作错误: {e}")
-            raise e
+            logging.error(f"Database operation failed: {e}")
+            raise
+        finally:
+            cursor.close()
     
     def create(self, company_data: CompanyFactData) -> int:
         """
@@ -116,18 +116,18 @@ class CompanyFactDB:
         RETURNING id
         """
         
-        try:
-            with self.conn.cursor() as cursor:
+        with self.get_cursor() as cursor:
+            try:
                 cursor.execute(query, values)
                 new_id = cursor.fetchone()[0]
                 self.conn.commit()
                 return new_id
-        except Exception as e:
-            self.conn.rollback()
-            logging.error(f"创建公司信息失败: {e}")
-            raise e
+            except Exception as e:
+                self.conn.rollback()
+                logging.error(f"创建公司信息失败: {e}")
+                raise e
     
-    def get_by_id(self, company_id: int) -> Optional[Dict]:
+    def get_by_id(self, company_id: int) -> CompanyFactData:
         """
         根据ID查询公司信息
         
@@ -135,13 +135,15 @@ class CompanyFactDB:
             company_id: 公司ID
             
         Returns:
-            Dict: 公司信息字典，如果不存在返回None
+            CompanyFactData: 公司信息字典，如果不存在返回None
         """
         query = f"SELECT * FROM {self.table_name} WHERE id = %s"
-        result = self._execute_query(query, (company_id,))
-        return dict(result[0]) if result else None
+        with self.get_cursor(False) as cursor:
+            cursor.execute(query, (company_id,))
+            result = cursor.fetchone()
+            return CompanyFactData(**result) if result else None
     
-    def get_by_stock_code(self, stock_code: str, stock_type: str = 'A') -> Optional[Dict]:
+    def get_by_stock_code(self, stock_code: str, stock_type: str = 'A') -> CompanyFactData:
         """
         根据股票代码查询公司信息
         
@@ -150,7 +152,7 @@ class CompanyFactDB:
             stock_type: 股票类型 ('A', 'B', 'H')
             
         Returns:
-            Dict: 公司信息字典，如果不存在返回None
+            CompanyFactData: 公司信息字典，如果不存在返回None
         """
         field_mapping = {
             'A': 'a_share_code',
@@ -163,10 +165,16 @@ class CompanyFactDB:
             raise ValueError("股票类型必须是 'A', 'B' 或 'H'")
         
         query = f"SELECT * FROM {self.table_name} WHERE {field} = %s"
-        result = self._execute_query(query, (stock_code,))
-        return dict(result[0]) if result else None
+        try:
+            with self.get_cursor(False) as cursor:
+                cursor.execute(query, (stock_code,))
+                result = cursor.fetchone()
+                return CompanyFactData(**result) if result else None
+        except Exception as e:
+            logging.error(f"查询公司信息失败: {e}")
+            raise e
     
-    def get_by_company_name(self, company_name: str, exact_match: bool = True) -> List[Dict]:
+    def get_by_company_name(self, company_name: str, exact_match: bool = True) -> List[CompanyFactData]:
         """
         根据公司名称查询公司信息
         
@@ -175,7 +183,7 @@ class CompanyFactDB:
             exact_match: 是否精确匹配，False则模糊查询
             
         Returns:
-            List[Dict]: 公司信息列表
+            List[CompanyFactData]: 公司信息列表
         """
         if exact_match:
             query = f"SELECT * FROM {self.table_name} WHERE company_name = %s"
@@ -183,11 +191,16 @@ class CompanyFactDB:
         else:
             query = f"SELECT * FROM {self.table_name} WHERE company_name LIKE %s"
             params = (f"%{company_name}%",)
-        
-        result = self._execute_query(query, params)
-        return [dict(row) for row in result] if result else []
+        try:
+            with self.get_cursor(False) as cursor:
+                cursor.execute(query, params)
+                results = cursor.fetchall()
+                return [CompanyFactData(**result) for result in results]
+        except Exception as e:
+            logging.error(f"查询公司信息失败: {e}")
+            raise e
     
-    def get_by_industry(self, industry: str) -> List[Dict]:
+    def get_by_industry(self, industry: str) -> List[CompanyFactData]:
         """
         根据行业查询公司信息
         
@@ -198,10 +211,16 @@ class CompanyFactDB:
             List[Dict]: 公司信息列表
         """
         query = f"SELECT * FROM {self.table_name} WHERE industry_category = %s ORDER BY company_name"
-        result = self._execute_query(query, (industry,))
-        return [dict(row) for row in result] if result else []
+        try:
+            with self.get_cursor(False) as cursor:
+                cursor.execute(query, (industry,))
+                results = cursor.fetchall()
+                return [CompanyFactData(**result) for result in results]
+        except Exception as e:
+            logging.error(f"查询公司信息失败: {e}")
+            raise e
     
-    def get_by_market(self, market: str) -> List[Dict]:
+    def get_by_market(self, market: str) -> List[CompanyFactData]:
         """
         根据市场查询公司信息
         
@@ -209,13 +228,19 @@ class CompanyFactDB:
             market: 市场名称
             
         Returns:
-            List[Dict]: 公司信息列表
+            List[CompanyFactData]: 公司信息列表
         """
         query = f"SELECT * FROM {self.table_name} WHERE market_category = %s ORDER BY company_name"
-        result = self._execute_query(query, (market,))
-        return [dict(row) for row in result] if result else []
+        try:
+            with self.get_cursor(False) as cursor:
+                cursor.execute(query, (market,))
+                results = cursor.fetchall()
+                return [CompanyFactData(**result) for result in results]
+        except Exception as e:
+            logging.error(f"查询公司信息失败: {e}")
+            raise e
     
-    def get_all(self, limit: int = None, offset: int = 0) -> List[Dict]:
+    def get_all(self, limit: int = None, offset: int = 0) -> List[CompanyFactData]:
         """
         查询所有公司信息
         
@@ -224,15 +249,21 @@ class CompanyFactDB:
             offset: 偏移量
             
         Returns:
-            List[Dict]: 公司信息列表
+            List[CompanyFactData]: 公司信息列表
         """
         query = f"SELECT * FROM {self.table_name} ORDER BY id"
         
         if limit:
             query += f" LIMIT {limit} OFFSET {offset}"
         
-        result = self._execute_query(query)
-        return [dict(row) for row in result] if result else []
+        try:
+            with self.get_cursor(False) as cursor:
+                cursor.execute(query)
+                results = cursor.fetchall()
+                return [CompanyFactData(**result) for result in results]
+        except Exception as e:
+            logging.error(f"查询公司信息失败: {e}")
+            raise e
     
     def update_by_id(self, company_id: int, update_data: Dict[str, Any]) -> bool:
         """
@@ -266,11 +297,13 @@ class CompanyFactDB:
         """
         
         try:
-            affected_rows = self._execute_query(query, tuple(values), fetch=False)
+            with self.get_cursor() as cursor:
+                cursor.execute(query, tuple(values))
+                affected_rows = cursor.rowcount
             return affected_rows > 0
         except Exception as e:
             logging.error(f"更新公司信息失败: {e}")
-            return False
+            raise e
     
     def update_by_stock_code(self, stock_code: str, update_data: Dict[str, Any], stock_type: str = 'A') -> bool:
         """
@@ -315,7 +348,10 @@ class CompanyFactDB:
         """
         
         try:
-            affected_rows = self._execute_query(query, tuple(values), fetch=False)
+            with self.get_cursor() as cursor:
+                cursor.execute(query, tuple(values))
+                affected_rows = cursor.rowcount
             return affected_rows > 0
         except Exception as e:
-            logging.error
+            logging.error(f"更新公司信息失败: {e}")
+            raise e
