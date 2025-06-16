@@ -1,6 +1,10 @@
 CREATE USER ai_hedge_fund WITH PASSWORD 'dnuf_egdeh_ia';
 
+CREATE DATABASE db_ai_hedge_fund;
+
 GRANT ALL PRIVILEGES ON DATABASE db_ai_hedge_fund TO ai_hedge_fund;
+
+\c db_ai_hedge_fund
 
 GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO ai_hedge_fund;
 GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO ai_hedge_fund;

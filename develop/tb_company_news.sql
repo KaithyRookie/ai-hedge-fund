@@ -25,8 +25,8 @@ CREATE INDEX idx_tb_company_news_news_source ON tb_company_news(news_source);
 CREATE INDEX idx_tb_company_news_sentiment ON tb_company_news(sentiment);
 CREATE INDEX idx_tb_company_news_market_impact ON tb_company_news(market_impact);
 CREATE INDEX idx_tb_company_news_is_deleted ON tb_company_news(is_deleted);
-CREATE INDEX idx_tb_company_news_title ON tb_company_news USING gin(to_tsvector('chinese', news_title));
-CREATE INDEX idx_tb_company_news_content ON tb_company_news USING gin(to_tsvector('chinese', news_content));
+CREATE INDEX idx_tb_company_news_title ON tb_company_news USING gin(to_tsvector('simple', news_title));
+CREATE INDEX idx_tb_company_news_content ON tb_company_news USING gin(to_tsvector('simple', news_content));
 
 -- 创建复合索引
 CREATE INDEX idx_tb_company_news_ticker_time ON tb_company_news(ticker, publish_time DESC);

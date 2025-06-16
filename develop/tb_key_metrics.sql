@@ -1,5 +1,5 @@
 -- 创建 tb_key_metrics 表
-CREATE TABLE IF NOT EXISTS tb_key_metrics_sina (
+CREATE TABLE IF NOT EXISTS tb_key_metrics (
     id SERIAL PRIMARY KEY,  -- 自增主键
     ticker VARCHAR(10) NOT NULL,  -- 股票代码
     report_date DATE NOT NULL,  -- 报告日期

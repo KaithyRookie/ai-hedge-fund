@@ -89,4 +89,4 @@ CREATE TABLE IF NOT EXISTS tb_profit_sina (
     is_deleted BOOLEAN DEFAULT FALSE -- '是否删除'
 );
 
-CREATE INDEX idx_ticker_report_date ON tb_profit_sina (ticker, report_date);
+CREATE INDEX idx_profit_ticker_report_date ON tb_profit_sina (ticker, report_date);
