@@ -3,6 +3,9 @@ from datetime import datetime
 from src.data.models import FinancialMetrics
 import psycopg2
 
+from contextlib import contextmanager
+from psycopg2.extras import RealDictCursor
+
 class FinancialMetricsDB:
     def __init__(self, conn: psycopg2.connect):
         self.conn = conn
@@ -10,9 +13,10 @@ class FinancialMetricsDB:
     def __del__(self):
         if hasattr(self, 'conn'):
             self.conn.close()
+    @contextmanager
     def get_cursor(self, commit: bool = True):
         """获取数据库游标的上下文管理器"""
-        cursor = self.get_cursor(cursor_factory=RealDictCursor)
+        cursor = self.conn.cursor(cursor_factory=RealDictCursor)
         try:
             yield cursor
             if commit:

@@ -1,6 +1,9 @@
+import logging
 from ast import Dict
 from datetime import date, datetime
 from typing import Optional
+
+import psycopg2
 from pydantic import BaseModel, Field
 
 
@@ -10,7 +13,7 @@ class KeyMetricsData(BaseModel):
     
     # 基本信息
     ticker: Optional[str] = Field(default=None, max_length=10, description="股票代码")
-    report_date: Optional[date] = Field(default=None, description="报告日期")
+    report_date: Optional[datetime] = Field(default=None, description="报告日期")
     
     # 主要财务数据
     parent_company_net_profit: Optional[float] = Field(default=None, description="归母净利润")
@@ -99,15 +102,17 @@ class KeyMetricsData(BaseModel):
     updated_at: Optional[datetime] = Field(default=None, description="更新时间")
     is_deleted: Optional[bool] = Field(default=False, description="是否删除")
 
+from contextlib import contextmanager
+from psycopg2.extras import RealDictCursor
+
 class KeyMetricsDB:
     def __init__(self, conn):
         self.conn = conn
-    def __del__(self):
-        if hasattr(self, 'conn'):
-            self.conn.close()
+
+    @contextmanager
     def get_cursor(self, commit: bool = True):
         """获取数据库游标的上下文管理器"""
-        cursor = self.get_cursor(cursor_factory=RealDictCursor)
+        cursor = self.conn.cursor(cursor_factory=RealDictCursor)
         try:
             yield cursor
             if commit:
@@ -118,6 +123,27 @@ class KeyMetricsDB:
             raise
         finally:
             cursor.close()
+    
+    def get_latest_report_date(self, ticker:str) ->datetime:
+        sql = """
+            SELECT report_date
+            FROM tb_key_metrics
+            WHERE ticker = %s
+            ORDER BY report_date DESC
+            LIMIT 1
+        """
+        with self.get_cursor(False) as cursor:
+            try:
+                cursor.execute(sql, (ticker,))
+                result = cursor.fetchone()
+                return result['report_date'] if result else None
+            except psycopg2.Error as e:
+                logging.error(f"Failed to get latest report date: {e}")
+                raise e
+            except Exception as e:
+                logging.error(f"Error fetching latest report date: {e}")
+                raise e
+
     def insert_key_metrics(self, data:KeyMetricsData):
         columns = []
         values = []
@@ -129,12 +155,15 @@ class KeyMetricsDB:
             values.append(value)
         columns_str = ', '.join(columns)
         placeholders = ', '.join(['%s'] * len(values))
-        sql = f"INSERT INTO tb_key_metrics_sina ({columns_str}) VALUES ({placeholders})"
+        sql = f"INSERT INTO tb_key_metrics ({columns_str}) VALUES ({placeholders})"
         with self.get_cursor() as cursor:
             try:
                 cursor.execute(sql, values)
             except psycopg2.Error as e:
                 logging.error(f"Failed to insert key metrics: {e}")
+                raise e
+            except Exception as e:
+                logging.error(f"Error insert key metrics: {e}")
                 raise e
     
     def update_key_metrics(self, ticker:str, report_date:str, update_dict:dict):
@@ -142,7 +171,7 @@ class KeyMetricsDB:
         values = list(update_dict.values())
         values.append(ticker)
         values.append(report_date)
-        sql = f"UPDATE tb_key_metrics_sina SET {set_clause} WHERE ticker = %s AND report_date = %s"
+        sql = f"UPDATE tb_key_metrics SET {set_clause} WHERE ticker = %s AND report_date = %s"
         with self.get_cursor() as cursor:
             try:
                 cursor.execute(sql, values)
@@ -162,9 +191,9 @@ class KeyMetricsDB:
         params_str = ' AND '.join(params)
         sql = f"""
             SELECT *
-            FROM tb_key_metrics_sina
+            FROM tb_key_metrics
             WHERE {params_str}
-            ORDER BY id ASC
+            ORDER BY id
         """
         with self.get_cursor(False) as cursor:
             try:

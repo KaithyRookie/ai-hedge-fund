@@ -1,3 +1,5 @@
+import logging
+
 from pydantic import BaseModel, Field, HttpUrl
 from typing import Optional
 from datetime import datetime
@@ -94,16 +96,17 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 from typing import List, Optional, Dict, Any
 from datetime import datetime, date
-
+from contextlib import contextmanager
 class CompanyNewsDB:
     """公司新闻信息数据库操作类"""
     
     def __init__(self, conn: psycopg2.connect):
         self.conn = conn
-    
+
+    @contextmanager
     def get_cursor(self, commit: bool = True):
         """获取数据库游标的上下文管理器"""
-        cursor = self.get_cursor(cursor_factory=RealDictCursor)
+        cursor = self.conn.cursor(cursor_factory=RealDictCursor)
         try:
             yield cursor
             if commit:

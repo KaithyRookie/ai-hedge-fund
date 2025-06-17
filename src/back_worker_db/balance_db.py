@@ -163,6 +163,8 @@ class BalanceSheetData(BaseModel):
     is_deleted: bool
 
 from psycopg2.extras import RealDictCursor
+from contextlib import contextmanager
+
 class BalanceDB:
     def __init__(self, conn: psycopg2.connect):
         self.conn = conn
@@ -171,6 +173,7 @@ class BalanceDB:
         if hasattr(self, 'conn'):
             self.conn.close()
 
+    @contextmanager
     def get_cursor(self, commit: bool = True):
         """获取数据库游标的上下文管理器"""
         cursor = self.conn.cursor(cursor_factory=RealDictCursor)
@@ -197,7 +200,7 @@ class BalanceDB:
             """, (ticker,)) 
             try:
                 result = cur.fetchone()
-                return result[0] if result else None
+                return result['report_date'] if result else None
             except Exception as e:
                 logging.error(f"Error fetching latest report date: {e}")
                 raise e

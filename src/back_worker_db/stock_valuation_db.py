@@ -1,11 +1,14 @@
+import logging
 
+import psycopg2
 from pydantic import BaseModel
+from datetime import datetime
 
 
 class StockValuationData(BaseModel):
     id: int
     ticker: str
-    data_date: str  
+    data_date: datetime
     closing_price: float | None
     daily_change: float | None
     market_cap: float | None
@@ -22,13 +25,18 @@ class StockValuationData(BaseModel):
     created_at: str = None
     updated_at: str = None
     is_deleted: bool = False
-    
+
+from contextlib import contextmanager
+from psycopg2.extras import RealDictCursor
+
 class StockValuationDB:
     def __init__(self, conn):
         self.conn = conn
+
+    @contextmanager
     def get_cursor(self, commit: bool = True):
         """获取数据库游标的上下文管理器"""
-        cursor = self.get_cursor(cursor_factory=RealDictCursor)
+        cursor = self.conn.cursor(cursor_factory=RealDictCursor)
         try:
             yield cursor
             if commit:
@@ -52,7 +60,7 @@ class StockValuationDB:
             values.append(value)
         columns_str = ', '.join(columns)
         placeholders = ', '.join(['%s'] * len(values))
-        sql = f"INSERT INTO stock_valuation ({columns_str}) VALUES ({placeholders})"
+        sql = f"INSERT INTO tb_stock_valuation ({columns_str}) VALUES ({placeholders})"
         with self.get_cursor() as cur:
             try:
                 cur.execute(sql, values)
@@ -70,7 +78,7 @@ class StockValuationDB:
                 cur.execute(sql, (ticker,))
                 result = cur.fetchone()
                 if result:
-                    return result[0]
+                    return result['data_date']
                 return None
             except Exception as e: 
                 logging.error(f"Error fetching latest stock valuation date: {e}")
@@ -80,7 +88,6 @@ class StockValuationDB:
         """
         查询股票估值数据
         :param ticker: 股票代码
-        :param data_date: 数据日期，可选参数
         :return: 查询结果列表
         """
         params = ['ticker = %s']

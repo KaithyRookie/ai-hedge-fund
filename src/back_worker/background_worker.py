@@ -46,7 +46,7 @@ class BackgroundWorker:
         self.stock_valuation_worker = stock_valuation_worker
 
     def main_process(self):
-        # self.stock_worker.get_all_a_stocks()
+        self.stock_worker.get_all_a_stocks()
         success = self.inside_trade_worker.download_inside_trade()
         if not success:
             logging.error("")
@@ -72,7 +72,7 @@ class BackgroundWorker:
         return True
 
 
-    def start_task(self, ticker: str):
+    def start_task(self, ticker: str, stock_type: str = 'A'):
         # 启动任务
         logging.info(f"start download stock balance sheet: {ticker}")
         success = self.balance_worker.download_balance_from_report(ticker)
@@ -90,7 +90,7 @@ class BackgroundWorker:
             return False
         time.sleep(5)
         logging.info(f"start download stock financial indicators: {ticker}")
-        success = self.financial_indicators_worker.download_financial_indicators_from_report(ticker)
+        success = self.financial_indicators_worker.download_financial_indicators_from_report(ticker, stock_type)
         if not success:
             return False
         time.sleep(5)
@@ -149,9 +149,11 @@ if __name__ == '__main__':
 
     worker = BackgroundWorker(balance_worker, cash_worker, profit_worker, stock_worker, company_news_worker,financial_indicators_worker, financial_metric_manager, inside_trade_worker, key_metric_worker, stock_valuation_worker)
     try:
-        stock = stock_db.get_stock_by_ticker_name("美登科技")
-        logging.info(f"stock: {stock}")
         # worker.main_process()
+        # financial_indicators_worker.download_financial_indicators_from_report('838227')
+        # success = key_metric_worker.download_key_metrics('838227')
+
+        stock_valuation_worker.download_stock_valuation('838227')
     except Exception as e:
         logging.error(f"任务执行出错: {e}")
     finally:

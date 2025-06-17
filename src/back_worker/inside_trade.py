@@ -23,6 +23,9 @@ class InsideTradeWorker:
                 stock = self.stock_db.get_stock_by_ticker_name(data.stock_name)
                 if stock:
                     data.stock_code = stock.ticker
+                else:
+                    logging.error(f"stock name: {data.stock_name} not found")
+                    continue
             data.change_date = row['变动日期']
             data.change_person = row['变动人']
             data.change_shares = row['变动股数']

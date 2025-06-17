@@ -12,7 +12,5 @@ class StockPriceDB:
             database=database
         )  
 
-    def __del__(self):
-        if hasattr(self, 'conn'):
-            self.conn.close()
+
 

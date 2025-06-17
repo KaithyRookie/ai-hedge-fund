@@ -12,20 +12,17 @@ class StockValuationWorker:
         """
         下载股票估值数据并保存到数据库中
         """
-        latest_data_date_str = self.db.get_latest_stock_valuation_date(ticker)
-        if latest_data_date_str is None:
-            latest_data_date_str = '1970-01-01'  # 如果没有数据，从1970-01-01开始下载
-            # 如果没有数据，从1970-01-01开始下载
-        latest_data_date = datetime.strptime(latest_data_date_str, '%Y-%m-%d').date()
+        latest_report_date = self.db.get_latest_stock_valuation_date(ticker)
+
+        latest_report_date = datetime(latest_report_date.year, latest_report_date.month, latest_report_date.day) if latest_report_date else datetime(1900, 1, 1)
         stock_value_em_df = ak.stock_value_em(symbol=ticker)
         for index, row in stock_value_em_df.iterrows():
-            value_date_str = row['数据日期']
-            value_date = datetime.strptime(value_date_str, '%Y-%m-%d').date()
-            if value_date < latest_data_date:  # 跳过已经下载的数据
+            value_date= row['数据日期']
+            if value_date < latest_report_date.date():  # 跳过已经下载的数据
                 continue
             data = StockValuationData.model_construct()
             data.ticker = ticker
-            data.data_date = value_date_str
+            data.data_date = datetime(value_date.year, value_date.month, value_date.day)
             if not pd.isna(row['当日收盘价']):  
                 data.closing_price = row['当日收盘价']
             if not pd.isna(row['当日涨跌幅']):

@@ -82,14 +82,15 @@ class CashFlowData(BaseModel):
     updated_at: Optional[datetime]
     is_deleted: bool
 
-
+from contextlib import contextmanager
 class CashFlowDB:
     def __init__(self, conn: psycopg2.connect):
         self.conn = conn
 
+    @contextmanager
     def get_cursor(self, commit: bool = True):
         """获取数据库游标的上下文管理器"""
-        cursor = self.get_cursor(cursor_factory=RealDictCursor)
+        cursor = self.conn.cursor(cursor_factory=RealDictCursor)
         try:
             yield cursor
             if commit:
@@ -150,7 +151,7 @@ class CashFlowDB:
                 """, (ticker,))
                 result = cur.fetchone()
                 if result:
-                    return result[0]
+                    return result['report_date']
                 else:
                     return None
             except Exception as e:
@@ -182,16 +183,7 @@ class CashFlowDB:
         with self.get_cursor(False) as cur:
             try:
                 cur.execute(sql, values)
-                data_list = []
-                for row in cur.fetchall():
-                    data = CashFlowData.model_construct()
-                    for key, value in row.items():
-                        if value is None:
-                            continue  # 跳过None值，避免TypeError: Object of type NoneType is not JSON serializable
-                        if key == 'created_at' or key == 'update_at':
-                            value = datetime.strptime(value, '%Y-%m-%d %H:%M:%S')
-                        setattr(data, key, value)
-                    data_list.append(data)
+                data_list = [CashFlowData(**row) for row in cur.fetchall()]
                 return data_list
             except Exception as e:
                 logging.error(f"Error getting cash flow data for ticker {ticker}: {e}")

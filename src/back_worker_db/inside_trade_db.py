@@ -1,3 +1,5 @@
+import logging
+
 from pydantic import BaseModel, Field
 from typing import Optional
 from datetime import date, datetime
@@ -8,6 +10,8 @@ from psycopg2.extras import RealDictCursor
 from typing import List, Optional, Dict, Any
 from datetime import date, datetime
 from decimal import Decimal
+
+from contextlib import contextmanager
 
 class InsideTradeData(BaseModel):
     """内部交易记录数据模型"""
@@ -52,15 +56,20 @@ class InsideTradeDB:
     def __init__(self, conn: psycopg2.connect):
         self.conn = conn
 
+    @contextmanager
     def get_cursor(self, commit: bool = True):
         """获取数据库游标的上下文管理器"""
-        cursor = self.get_cursor(cursor_factory=RealDictCursor)
+        if not commit:
+            cursor = self.conn.cursor(cursor_factory=RealDictCursor)
+        else:
+            cursor = self.conn.cursor()
         try:
             yield cursor
             if commit:
                 self.conn.commit()
         except Exception as e:
-            self.conn.rollback()
+            if commit:
+                self.conn.rollback()
             logging.error(f"Database operation failed: {e}")
             raise
         finally:
@@ -105,7 +114,7 @@ class InsideTradeDB:
                 logging.error(f"Failed to insert inside trade record: {e}")
                 raise e
             return record_id
-    
+
     def batch_insert(self, trade_data_list: List[InsideTradeData]) -> List[int]:
         """批量插入内部交易记录
         
@@ -338,7 +347,7 @@ class InsideTradeDB:
     
     
 
-    def check_record_exists(self, stock_code: str, change_date: date, change_person: str) -> bool:
+    def check_record_exists(self, stock_code: str, change_date: str, change_person: str) -> bool:
         """检查是否存在重复记录
 
         Args:
@@ -350,15 +359,18 @@ class InsideTradeDB:
             bool: 是否存在重复记录
         """
         sql = f"""
-        SELECT COUNT(*) FROM tb_inside_trade
+        SELECT COUNT(*) as num FROM tb_inside_trade
         WHERE stock_code = '{stock_code}' AND change_date = '{change_date}' AND change_person = '{change_person}'
         """
 
         with self.get_cursor(False) as cursor:
             try:
                 cursor.execute(sql)
-                count = cursor.fetchone()[0]
-                return count > 0
+                result = cursor.fetchone()
+                return result['num'] > 0
             except psycopg2.Error as e:
+                logging.error(f"Failed to check record existence: {e}")
+                raise e
+            except Exception as e:
                 logging.error(f"Failed to check record existence: {e}")
                 raise e

@@ -2,6 +2,10 @@ import logging
 import psycopg2
 from typing import Optional
 from pydantic import BaseModel
+
+from src.back_worker_db.database import get_db_connection
+
+
 class ProfitData(BaseModel):
     id: int
     ticker: Optional[str]
@@ -92,13 +96,17 @@ class ProfitData(BaseModel):
     updated_at: Optional[str]
     is_deleted: bool
 
+from contextlib import contextmanager
+from psycopg2.extras import RealDictCursor
+
 class ProfitDB:
     def __init__(self, conn: psycopg2.connect):
         self.conn = conn
-    
+
+    @contextmanager
     def get_cursor(self, commit: bool = True):
         """获取数据库游标的上下文管理器"""
-        cursor = self.get_cursor(cursor_factory=RealDictCursor)
+        cursor = self.conn.cursor(cursor_factory=RealDictCursor)
         try:
             yield cursor
             if commit:
@@ -150,7 +158,7 @@ class ProfitDB:
                     LIMIT 1
                 """, (ticker,))
                 result = cur.fetchone()
-                return result[0] if result else None
+                return result['report_date'] if result else None
             except Exception as e:
                 logging.error(f"Error fetching latest report date for ticker {ticker}: {e}")
                 raise e
@@ -211,3 +219,4 @@ class ProfitDB:
             except Exception as e:
                 logging.error(f"Error updating data for ticker {ticker} and report_period {report_period}: {e}")
                 raise e
+

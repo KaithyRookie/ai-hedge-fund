@@ -1,3 +1,5 @@
+import logging
+
 import psycopg2
 from typing import Optional, List
 from datetime import datetime
@@ -28,13 +30,16 @@ class StockType(Enum):
     def to_string(self):
         return self.value
 
+from contextlib import contextmanager
+
 class StockDB:
     def __init__(self, conn: psycopg2.connect):
         self.conn = conn
 
+    @contextmanager
     def get_cursor(self, commit: bool = True):
         """获取数据库游标的上下文管理器"""
-        cursor = self.get_cursor(cursor_factory=RealDictCursor)
+        cursor = self.conn.cursor(cursor_factory=RealDictCursor)
         try:
             yield cursor
             if commit:

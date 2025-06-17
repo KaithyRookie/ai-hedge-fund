@@ -70,6 +70,7 @@ class CompanyFactData(BaseModel):
         data = self.model_dump(exclude_none=True, exclude={'id', 'created_at', 'updated_at'})
         return data
 
+from contextlib import contextmanager
 class CompanyFactDB:
     """公司基本信息数据库操作类"""
     
@@ -77,10 +78,11 @@ class CompanyFactDB:
         """初始化数据库连接"""
         self.conn = conn
         self.table_name = "tb_company_facts"
-    
+
+    @contextmanager
     def get_cursor(self, commit: bool = True):
         """获取数据库游标的上下文管理器"""
-        cursor = self.get_cursor(cursor_factory=RealDictCursor)
+        cursor = self.conn.cursor(cursor_factory=RealDictCursor)
         try:
             yield cursor
             if commit:

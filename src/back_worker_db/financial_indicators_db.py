@@ -20,7 +20,7 @@ class FinancialIndicatorsData(BaseModel):
     # 主键和基础信息
     id: Optional[int] = Field(None, description="主键ID")
     ticker: str = Field(..., description="股票代码")
-    report_date: date = Field(..., description="报告日期")
+    report_date: datetime = Field(..., description="报告日期")
     
     # 每股指标
     diluted_eps: Optional[Decimal] = Field(None, description="摊薄每股收益(元)")
@@ -156,13 +156,11 @@ class FinancialIndicatorsData(BaseModel):
         return self.model_dump(exclude_none=True)
     
     @classmethod
-    def from_raw_data(cls, raw_data: dict, ticker:str, report_date: date) -> 'FinancialIndicatorsData':
+    def from_raw_data(cls, raw_data: dict, ticker:str, report_date: datetime) -> 'FinancialIndicatorsData':
         """从原始数据创建实例的工厂方法"""
         # 这里可以添加数据映射逻辑
         # 例如将中文字段名映射到英文字段名
         field_mapping = {
-            '股票代码': 'ticker',
-            '报告日期': 'report_date',
             '摊薄每股收益(元)': 'diluted_eps',
             '加权每股收益(元)': 'weighted_eps',
             '每股收益_调整后(元)': 'adjusted_eps',
@@ -233,7 +231,7 @@ class FinancialIndicatorsData(BaseModel):
             '长期股票投资(元)': 'long_term_stock_investment',
         }
         
-        mapped_data = {'report_date': report_date, 'ticker': ticker}
+        mapped_data = {'report_date': report_date, 'ticker': ticker, 'is_deleted': False}
         for chinese_name, value in raw_data.items():
             if chinese_name in field_mapping:
                 english_name = field_mapping[chinese_name]
@@ -241,13 +239,17 @@ class FinancialIndicatorsData(BaseModel):
                 if pd.isna(value):
                     mapped_data[english_name] = None
                 else:
-                    try:
-                        mapped_data[english_name] = Decimal(str(value))
-                    except (ValueError, TypeError):
-                        mapped_data[english_name] = None
-        
+                    # 判断 english_name 对应的类型是否是 Decimal
+
+                    if english_name in cls.model_fields:
+                        if cls.model_fields[english_name].annotation is Optional[Decimal]:
+                            mapped_data[english_name] = Decimal(str(value))
+                        else:
+                            mapped_data[english_name] = value
+
         return cls(**mapped_data)
 
+from contextlib import contextmanager
 class FinancialIndicatorsDB:
     """财务指标数据库操作类"""
     
@@ -259,7 +261,8 @@ class FinancialIndicatorsDB:
             conn: psycopg2 数据库连接对象
         """
         self.conn = conn
-    
+
+    @contextmanager
     def get_cursor(self, commit: bool = True):
         """获取数据库游标的上下文管理器"""
         cursor = self.conn.cursor(cursor_factory=RealDictCursor)
@@ -301,15 +304,13 @@ class FinancialIndicatorsDB:
         
         return data
     
-    def create(self, data: FinancialIndicatorsData) -> FinancialIndicatorsData:
+    def create(self, data: FinancialIndicatorsData):
         """
         创建新的财务指标记录
         
         Args:
             data: 财务指标数据
             
-        Returns:
-            创建后的财务指标数据（包含ID）
         """
         columns = []
         values = []
@@ -328,9 +329,7 @@ class FinancialIndicatorsDB:
         with self.get_cursor() as cursor:
             try:
                 cursor.execute(query, values)
-                record = cursor.fetchone()
-                logger.info(f"Created financial indicator record with ID: {record['id']}")
-                return self._convert_record_to_model(dict(record))
+                logger.info(f"Created financial indicator record success")
             except Exception as e:
                 logger.error(f"Error creating financial indicator: {e}")
                 raise
@@ -636,13 +635,15 @@ class FinancialIndicatorsDB:
         Returns:
             最新的报告日期或None
         """
-        query = "SELECT MAX(report_date) FROM tb_financial_indicators WHERE ticker = %s"
+        query = "SELECT report_date FROM tb_financial_indicators WHERE ticker = %s ORDER BY report_date DESC LIMIT 1"
         
         with self.get_cursor(commit=False) as cursor:
             try:
                 cursor.execute(query, (ticker,))
-                result = cursor.fetchone()[0]
-                return result
+                result = cursor.fetchone()
+                if result:
+                    return result['report_date']
+                return None
             except Exception as e:
                 logger.error(f"Error getting latest date: {e}")
                 raise
@@ -664,14 +665,14 @@ class FinancialIndicatorsDB:
         if report_date:
             params.append(report_date)
         
-        query = "SELECT COUNT(*) FROM tb_financial_indicators"
+        query = "SELECT COUNT(*) as num FROM tb_financial_indicators"
         if params:
             query += " WHERE " + " AND ".join([f"{col} = %s" for col in params]) 
         
         with self.get_cursor(commit=False) as cursor:
             try:
                 cursor.execute(query, params)
-                result = cursor.fetchone()[0]
+                result = cursor.fetchone()['num']
                 return result
             except Exception as e:
                 logger.error(f"Error counting records: {e}")
@@ -720,7 +721,7 @@ class FinancialIndicatorsDB:
                 logger.error(f"Error upserting financial indicator: {e}")
                 raise
     
-    def execute_custom_query(self, query: str, params: tuple = None) -> List[dict]:
+    def execute_custom_query(self, query: str, params: tuple = None) -> List[FinancialIndicatorsData]:
         """
         执行自定义查询
         
@@ -735,7 +736,7 @@ class FinancialIndicatorsDB:
             try:
                 cursor.execute(query, params or ())
                 records = cursor.fetchall()
-                return [dict(record) for record in records]
+                return [FinancialIndicatorsData(**record) for record in records]
             except Exception as e:
                 logger.error(f"Error executing custom query: {e}")
                 raise
